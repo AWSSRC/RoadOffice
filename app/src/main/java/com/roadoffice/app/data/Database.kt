@@ -44,6 +44,42 @@ data class ClientEntity(
     val createdAt: Long,
 )
 
+/** 미팅 회고 — 원문(말한 내용)과 정리 결과를 함께 보관. */
+@Entity(tableName = "meeting_notes")
+data class MeetingNoteEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val clientId: Long?,
+    val clientName: String?,
+    val tripId: Long?,
+    val createdAt: Long,
+    val rawText: String,
+    val summary: String,
+    /** 할 일, 줄바꿈 구분 */
+    val tasks: String,
+    val followUpAt: Long?,
+    /** rule / llm / server */
+    val source: String,
+    val tasksDone: Boolean = false,
+)
+
+@Dao
+interface MeetingNoteDao {
+    @Insert
+    suspend fun insert(note: MeetingNoteEntity): Long
+
+    @Query("SELECT * FROM meeting_notes ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<MeetingNoteEntity>>
+
+    @Query("SELECT * FROM meeting_notes WHERE clientId = :clientId ORDER BY createdAt DESC")
+    suspend fun forClient(clientId: Long): List<MeetingNoteEntity>
+
+    @Query("SELECT COUNT(*) FROM meeting_notes WHERE tripId = :tripId")
+    suspend fun countForTrip(tripId: Long): Int
+
+    @Query("UPDATE meeting_notes SET tasksDone = :done WHERE id = :id")
+    suspend fun setDone(id: Long, done: Boolean)
+}
+
 @Dao
 interface TripDao {
     @Insert
@@ -57,6 +93,15 @@ interface TripDao {
 
     @Query("UPDATE trips SET purpose = :purpose, purposeByUser = 1 WHERE id = :id")
     suspend fun setPurpose(id: Long, purpose: String)
+
+    @Query("SELECT * FROM trips ORDER BY endAt DESC LIMIT 1")
+    suspend fun latest(): TripEntity?
+
+    @Query("SELECT * FROM trips WHERE startAt >= :from AND startAt < :to ORDER BY startAt")
+    suspend fun between(from: Long, to: Long): List<TripEntity>
+
+    @Query("SELECT COUNT(*) FROM trips WHERE clientId = :clientId")
+    suspend fun visits(clientId: Long): Int
 
     @Query("DELETE FROM trips")
     suspend fun deleteAll()
@@ -73,14 +118,18 @@ interface ClientDao {
     @Query("SELECT * FROM clients")
     suspend fun all(): List<ClientEntity>
 
+    @Query("SELECT * FROM clients WHERE id = :id")
+    suspend fun byId(id: Long): ClientEntity?
+
     @Query("DELETE FROM clients WHERE id = :id")
     suspend fun delete(id: Long)
 }
 
-@Database(entities = [TripEntity::class, ClientEntity::class], version = 1, exportSchema = false)
+@Database(entities = [TripEntity::class, ClientEntity::class, MeetingNoteEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun trips(): TripDao
     abstract fun clients(): ClientDao
+    abstract fun notes(): MeetingNoteDao
 
     companion object {
         /** SQLCipher 로 DB 파일 전체를 암호화. 암호키는 [DbKeyStore] 가 Keystore 로 감싸 보관한다. */
@@ -89,6 +138,8 @@ abstract class AppDatabase : RoomDatabase() {
             val passphrase = DbKeyStore(context).passphrase()
             return Room.databaseBuilder(context, AppDatabase::class.java, "roadoffice.db")
                 .openHelperFactory(SupportOpenHelperFactory(passphrase))
+                // 개발 단계: 스키마 변경 시 시험 데이터 초기화. 출시 전 Migration 으로 교체
+                .fallbackToDestructiveMigration()
                 .build()
         }
     }

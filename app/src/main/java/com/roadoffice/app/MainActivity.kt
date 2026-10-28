@@ -16,6 +16,9 @@ class MainActivity : ComponentActivity() {
         "pleos.car.permission.NAVI_ROUTE",
         "pleos.car.permission.NAVI_ROUTE_SEARCH",
         "pleos.car.permission.FUSED_LOCATION",
+        "pleos.car.permission.STT_SERVICE",
+        "pleos.car.permission.TTS_SERVICE",
+        android.Manifest.permission.RECORD_AUDIO,
         Car.PERMISSION_SPEED,
     )
 

@@ -146,3 +146,34 @@ class WorkMileSummaryTest {
         assertEquals(30.5 * 300 + 3600, s.claimAmount.toDouble(), 1.0)
     }
 }
+
+class ExporterTest {
+    private val t1 = ExportTrip(1_700_000_000_000, 1_700_000_900_000, 12345.0, 12359.0, 14.0, Purpose.BUSINESS, "서울아산병원", 1200)
+    private val t2 = ExportTrip(1_700_010_000_000, 1_700_010_600_000, 12359.0, 12364.0, 5.0, Purpose.PERSONAL, null, null)
+    private val p = ExportProfile("김영업", "영업1팀", 300)
+
+    @Test
+    fun `운행기록부는 계기판 전후 거리와 업무 사용거리를 적는다`() {
+        val csv = Exporter.mileageLogCsv(listOf(t2, t1), p)
+        assertTrue(csv.startsWith("﻿사용일자"))
+        val rows = csv.lines()
+        assertTrue(rows[1].contains("12345.0,12359.0,14.0,,14.0,서울아산병원"))
+        assertTrue(rows[2].contains("12359.0,12364.0,5.0,,,개인"))
+        assertTrue(csv.contains("업무 사용 비율 74%"))
+    }
+
+    @Test
+    fun `유류비 청구서는 업무 운행만, km 단가 더하기 통행료`() {
+        val csv = Exporter.fuelClaimCsv(listOf(t1, t2), p)
+        assertTrue(csv.contains("서울아산병원,14.0,300,4200,1200,5400"))
+        assertTrue(!csv.contains("개인"))
+        assertTrue(csv.lines().last { it.isNotBlank() }.startsWith("합계,,1건,14.0,,4200,1200,5400"))
+    }
+
+    @Test
+    fun `CSV 셀 수식 주입과 쉼표를 막는다`() {
+        assertEquals("'=HYPERLINK(1)", Exporter.esc("=HYPERLINK(1)"))
+        assertEquals("\"A, B\"", Exporter.esc("A, B"))
+        assertEquals("-3.0", Exporter.esc("-3.0"))
+    }
+}

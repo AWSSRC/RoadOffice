@@ -41,6 +41,8 @@ dependencies {
     implementation("ai.pleos.playground:Vehicle:2.3.2")
     implementation("ai.pleos.playground:NaviHelper:3.0.5")
     implementation("ai.pleos.playground:FusedLocation:1.1.3")
+    implementation("ai.pleos.playground:SpeechToText:3.3.1")
+    implementation("ai.pleos.playground:TextToSpeech:3.3.1")
 
     // 저장소: Room + SQLCipher(전체 DB 암호화, 키는 Android Keystore 로 보호)
     implementation("androidx.room:room-runtime:2.6.1")

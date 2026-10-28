@@ -25,6 +25,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roadoffice.app.AppGraph
 import com.roadoffice.app.data.ClientEntity
+import com.roadoffice.app.data.MeetingNoteEntity
 import com.roadoffice.app.data.TripEntity
 import com.roadoffice.app.workmile.Gear
 import com.roadoffice.app.workmile.LatLng
@@ -75,12 +78,15 @@ private fun DrivingView(graph: AppGraph) {
         Spacer(Modifier.height(12.dp))
         Text("%.1f km".format(km), color = Color.White, fontSize = 96.sp, fontWeight = FontWeight.Bold)
         trip?.destinationName?.let { Text("→ $it", color = Color.White, fontSize = 32.sp) }
+        val listening by graph.listening.collectAsState()
+        val debrief by graph.pendingDebrief.collectAsState()
+        if (listening) Text("🎙 듣고 있어요… ${debrief?.clientName ?: ""} 미팅 이야기를 말씀해 주세요", color = Active, fontSize = 26.sp)
         Spacer(Modifier.height(24.dp))
         Text("주행 중에는 조작할 수 없어요. 정차하면 운행 목록이 열립니다.", color = Sub, fontSize = 20.sp)
     }
 }
 
-private enum class Tab(val label: String) { TODAY("오늘 운행"), WORKMILE("워크마일"), CLIENTS("거래처"), SIGNALS("신호") }
+private enum class Tab(val label: String) { TODAY("오늘 운행"), NOTES("상담 일지"), WORKMILE("워크마일"), CLIENTS("거래처"), SIGNALS("신호") }
 
 @Composable
 private fun ParkedView(graph: AppGraph) {
@@ -105,9 +111,12 @@ private fun ParkedView(graph: AppGraph) {
                 )
             }
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+        DebriefBanner(graph)
+        Spacer(Modifier.height(8.dp))
         when (tab) {
             Tab.TODAY -> TodayTab(graph)
+            Tab.NOTES -> NotesTab(graph)
             Tab.WORKMILE -> WorkMileTab(graph)
             Tab.CLIENTS -> ClientsTab(graph)
             Tab.SIGNALS -> SignalsTab(graph)
@@ -211,7 +220,78 @@ private fun WorkMileTab(graph: AppGraph) {
     }
     Spacer(Modifier.height(12.dp))
     Text("청구액 = 업무 km × 단가 + 업무 운행 예상 통행료. 거리는 차량 주행거리계 기준입니다.", color = Sub, fontSize = 18.sp)
-    Text("내보내기(청구서·운행기록부 CSV/PDF)는 다음 단계(C-09)에서 추가됩니다.", color = Sub, fontSize = 18.sp)
+    Spacer(Modifier.height(20.dp))
+    var name by remember { mutableStateOf(graph.userName) }
+    var dept by remember { mutableStateOf(graph.department) }
+    var result by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(value = dept, onValueChange = { dept = it.take(30); graph.department = dept }, singleLine = true, label = { Text("부서") }, modifier = Modifier.width(260.dp))
+        Spacer(Modifier.width(12.dp))
+        OutlinedTextField(value = name, onValueChange = { name = it.take(20); graph.userName = name }, singleLine = true, label = { Text("성명") }, modifier = Modifier.width(220.dp))
+        Spacer(Modifier.width(16.dp))
+        Button(
+            onClick = { scope.launch { result = graph.exportMonth(from, to).files.joinToString("\n") { "· " + it.name } } },
+            colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue),
+        ) { Text("이번 달 정산 내보내기", fontSize = 20.sp) }
+    }
+    result?.let {
+        Spacer(Modifier.height(10.dp))
+        Text("만들어진 파일 (운행기록부·유류비 청구서 CSV, 정산 PDF):\n$it", color = Color.White, fontSize = 18.sp)
+    }
+}
+
+@Composable
+private fun DebriefBanner(graph: AppGraph) {
+    val pending by graph.pendingDebrief.collectAsState()
+    val p = pending ?: return
+    var text by remember(p.tripId) { mutableStateOf("") }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF00597A)).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("${p.clientName} 미팅 어땠어요?", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(16.dp))
+        OutlinedTextField(value = text, onValueChange = { text = it.take(2000) }, singleLine = true, placeholder = { Text("말하거나 입력 — 예: 견적 마음에 들어함, 다음 주 화요일 연락") }, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(12.dp))
+        Button(onClick = { graph.addNote(text) }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue)) { Text("저장", fontSize = 18.sp) }
+        Text("나중에", color = Color.White, fontSize = 18.sp, modifier = Modifier.clickable { graph.dismissDebrief() }.padding(12.dp))
+    }
+}
+
+private val md = SimpleDateFormat("M/d(E) HH:mm", Locale.KOREA)
+private val dayOnly = SimpleDateFormat("M/d(E)", Locale.KOREA)
+
+@Composable
+private fun NotesTab(graph: AppGraph) {
+    val notes by graph.db.notes().observeAll().collectAsState(initial = emptyList())
+    val openTasks = notes.filter { !it.tasksDone }.sumOf { n -> n.tasks.lines().count { it.isNotBlank() } }
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Stat("상담 일지", "${notes.size}건")
+        Stat("남은 할 일", "${openTasks}개", if (openTasks > 0) Warn else Color.White)
+        Stat("후속 일정", "${notes.count { it.followUpAt != null && !it.tasksDone }}건")
+    }
+    Spacer(Modifier.height(16.dp))
+    if (notes.isEmpty()) Text("거래처 방문 후 출발하면 \"미팅 어땠어요?\" 하고 물어요. 말한 내용이 여기에 정리됩니다.", color = Sub, fontSize = 20.sp)
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(notes, key = { it.id }) { n -> NoteRow(n) { graph.setTasksDone(n.id, !n.tasksDone) } }
+    }
+}
+
+@Composable
+private fun NoteRow(n: MeetingNoteEntity, onToggle: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(n.clientName ?: "거래처 미지정", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(md.format(Date(n.createdAt)), color = Sub, fontSize = 16.sp)
+        }
+        Text(n.summary, color = Color.White, fontSize = 19.sp)
+        n.tasks.lines().filter { it.isNotBlank() }.forEach { t ->
+            Text((if (n.tasksDone) "☑ " else "☐ ") + t, color = if (n.tasksDone) Sub else Warn, fontSize = 18.sp, modifier = Modifier.clickable { onToggle() }.padding(top = 4.dp))
+        }
+        n.followUpAt?.let { Text("후속 일정: ${dayOnly.format(Date(it))}", color = Active, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp)) }
+        Text("원문: ${n.rawText}", color = Sub, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+    }
 }
 
 @Composable

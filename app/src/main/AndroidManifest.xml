@@ -13,6 +13,10 @@
     <uses-permission android:name="android.car.permission.CAR_SPEED" />
     <!-- Pleos FusedLocation: 출발·도착 위치, 거래처 인식 -->
     <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
+    <!-- Pleos 음성: 미팅 후 회고(STT), 브리핑(TTS) -->
+    <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:name=".RoadOfficeApp"
@@ -31,5 +35,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Gleo Interface: assets/schema.json 의 function 을 Gleo AI 가 broadcast 로 호출 -->
+        <receiver
+            android:name=".gleo.GleoReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="MARK_TRIP_PURPOSE" />
+                <action android:name="ADD_MEETING_NOTE" />
+                <action android:name="GET_CLIENT_BRIEFING" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

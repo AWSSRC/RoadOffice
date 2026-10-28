@@ -1,0 +1,54 @@
+{
+  "packageName": "com.roadoffice.app",
+  "appDescription": "A work assistant for people who work on the road, which logs business driving mileage and turns spoken client meeting notes into records with follow-up tasks.",
+  "invokeWord": "로드오피스",
+  "version": "0.1.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "MARK_TRIP_PURPOSE",
+        "description": "Mark the most recent recorded trip as business or personal in the mileage log.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "purpose": { "type": "string", "enum": ["business", "personal"], "description": "Purpose category of the trip." }
+          },
+          "required": ["purpose"]
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "ADD_MEETING_NOTE",
+        "description": "Save what the user said about a client meeting as a meeting record with follow-up tasks.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "note": { "type": "string", "description": "The user's spoken account of the meeting." },
+            "clientName": { "type": "string", "description": "Name of the client or company the meeting was with." }
+          },
+          "required": ["note"]
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "GET_CLIENT_BRIEFING",
+        "description": "Read a short summary of past meetings and open tasks for a client before the next visit.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "clientName": { "type": "string", "description": "Name of the client or company to brief on." }
+          },
+          "required": ["clientName"]
+        },
+        "component": "service"
+      }
+    }
+  ]
+}
