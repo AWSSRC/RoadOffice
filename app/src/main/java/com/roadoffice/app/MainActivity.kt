@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateListOf
@@ -22,7 +23,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.pleos.playground.navi.constants.RouteOption
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
+import ai.pleos.playground.navi.data.RouteInfo
 import ai.pleos.playground.navi.data.RouteStartInfo
 import ai.pleos.playground.navi.data.TripInfo
 import ai.pleos.playground.navi.helper.NaviHelper
@@ -55,6 +58,7 @@ class MainActivity : ComponentActivity() {
         "pleos.car.permission.CAR_DRIVE",
         "pleos.car.permission.CAR_ENERGY",
         "pleos.car.permission.NAVI_ROUTE",
+        "pleos.car.permission.NAVI_ROUTE_SEARCH",
         Car.PERMISSION_SPEED,
     )
 
@@ -125,6 +129,17 @@ class MainActivity : ComponentActivity() {
         startSpeed()
     }
 
+    /** 시험용: 고객사(예: 현대차 강남대로사옥) 로 경로 안내 시작 → onRouteStarted·onDestinationArrived 확인 */
+    private fun requestTestRoute() {
+        if (!::naviHelper.isInitialized) return
+        runCatching {
+            naviHelper.requestRoute(
+                RouteInfo(37.4959, 127.0293, null, null, "현대차 강남대로사옥", "", "서울 강남구 강남대로 350", "", RouteOption.RECOMMENDED, "", false),
+            )
+            log("시험 경로 요청: 현대차 강남대로사옥")
+        }.onFailure { log("경로 요청 실패: ${it.message}") }
+    }
+
     private fun startSpeed() {
         runCatching {
             val c = Car.createCar(this)
@@ -182,7 +197,9 @@ class MainActivity : ComponentActivity() {
                     Tile("속도", speedKmh.value)
                     Tile("내비", naviState.value)
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = { requestTestRoute() }) { Text("시험 경로 시작", fontSize = 18.sp) }
+                Spacer(Modifier.height(16.dp))
                 Text("이벤트", color = Color(0xFF00AAD2), fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 LazyColumn(Modifier.fillMaxWidth()) {
                     items(events) { Text(it, color = Color.White, fontSize = 18.sp, modifier = Modifier.padding(vertical = 4.dp)) }

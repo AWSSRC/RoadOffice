@@ -8,6 +8,7 @@
     <uses-permission android:name="pleos.car.permission.CAR_ENERGY" />
     <!-- Pleos NaviHelper: 경로·도착·트립 정보 조회 -->
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
     <!-- AAOS 표준: 차량 속도 -->
     <uses-permission android:name="android.car.permission.CAR_SPEED" />
 
