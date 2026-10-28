@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
         "pleos.car.permission.FUSED_LOCATION",
         "pleos.car.permission.STT_SERVICE",
         "pleos.car.permission.TTS_SERVICE",
+        "pleos.car.permission.LLM_SERVICE",
         android.Manifest.permission.RECORD_AUDIO,
         Car.PERMISSION_SPEED,
     )

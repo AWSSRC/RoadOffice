@@ -8,7 +8,7 @@ import com.roadoffice.app.data.MeetingNoteEntity
 import com.roadoffice.app.data.TripEntity
 import com.roadoffice.app.meeting.Briefing
 import com.roadoffice.app.meeting.NoteAssistant
-import com.roadoffice.app.meeting.RuleNoteAssistant
+import com.roadoffice.app.meeting.LlmNoteAssistant
 import com.roadoffice.app.meeting.Voice
 import com.roadoffice.app.vehicle.NaviEvent
 import com.roadoffice.app.vehicle.VehicleSignals
@@ -62,7 +62,8 @@ class AppGraph(private val context: Context) {
     val voice by lazy { Voice(context) { signals.log(it) } }
     val settings = context.getSharedPreferences("roadoffice_settings", Context.MODE_PRIVATE)
     private val reports = ReportWriter(context)
-    var assistant: NoteAssistant = RuleNoteAssistant()
+    /** 상담 일지 정리기: Pleos 기기 내장 LLM 우선, 안 되면 규칙 기반 (서버 Bedrock 은 승인 후 추가) */
+    val assistant: NoteAssistant by lazy { LlmNoteAssistant(context, log = { signals.log(it) }) }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val recorder = TripRecorder()
@@ -92,6 +93,7 @@ class AppGraph(private val context: Context) {
         started = true
         signals.start()
         voice.start()
+        assistant // LLM 서비스는 연결에 시간이 걸려 미리 붙여 둔다
 
         scope.launch {
             var prev = Gear.UNKNOWN

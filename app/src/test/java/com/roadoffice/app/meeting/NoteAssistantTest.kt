@@ -45,3 +45,22 @@ class NoteAssistantTest {
         assertNotNull(t)
     }
 }
+
+class LlmParseTest {
+    // parse 는 LLM 객체 없이 검증 (Context 불필요한 정적 경로만 사용)
+    private fun parse(raw: String) = LlmParser.parse(raw, "다음 주 화요일 연락", 0L)
+
+    @Test
+    fun `정상 JSON 은 그대로, 앞뒤 잡음은 무시`() {
+        val s = parse("결과: {\"summary\":\"견적 긍정적\",\"tasks\":[\"카탈로그 보내기\"],\"followUp\":\"2026-11-03\"} 끝")!!
+        assertEquals("견적 긍정적", s.summary)
+        assertEquals(listOf("카탈로그 보내기"), s.tasks)
+        assertEquals("llm", s.source)
+    }
+
+    @Test
+    fun `요약이 비거나 JSON 이 아니면 null`() {
+        assertNull(parse("{\"summary\":\"\",\"tasks\":[]}"))
+        assertNull(parse("모르겠어요"))
+    }
+}

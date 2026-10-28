@@ -43,6 +43,7 @@ dependencies {
     implementation("ai.pleos.playground:FusedLocation:1.1.3")
     implementation("ai.pleos.playground:SpeechToText:3.3.1")
     implementation("ai.pleos.playground:TextToSpeech:3.3.1")
+    implementation("ai.pleos.playground:LLM:2.1.3.2")
 
     // 저장소: Room + SQLCipher(전체 DB 암호화, 키는 Android Keystore 로 보호)
     implementation("androidx.room:room-runtime:2.6.1")
@@ -60,4 +61,5 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303") // JVM 테스트에서 실제 org.json 사용
 }

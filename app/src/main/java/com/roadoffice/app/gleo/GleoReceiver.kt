@@ -43,8 +43,9 @@ class GleoReceiver : BroadcastReceiver() {
                         val note = params.optString("note").take(MAX_TEXT)
                         if (note.isBlank()) respond(context, action, "asking", "What should be saved in the meeting note?")
                         else {
-                            graph.addNote(note, params.optString("clientName").take(80).ifBlank { null }).join()
-                            respond(context, action, "success", "The meeting note was saved with follow-up tasks.", mode = "beep")
+                            // Gleo 는 7초 뒤 타임아웃 — 원문 접수를 먼저 응답하고 정리(AI)는 뒤에서 이어간다
+                            graph.addNote(note, params.optString("clientName").take(80).ifBlank { null })
+                            respond(context, action, "success", "The meeting note was received and is being organized into tasks.", mode = "beep")
                         }
                     }
                     GET_CLIENT_BRIEFING -> {
