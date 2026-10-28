@@ -11,15 +11,21 @@
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
     <!-- AAOS 표준: 차량 속도 -->
     <uses-permission android:name="android.car.permission.CAR_SPEED" />
+    <!-- Pleos FusedLocation: 출발·도착 위치, 거래처 인식 -->
+    <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
 
     <application
+        android:name=".RoadOfficeApp"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
             android:name=".MainActivity"
             android:exported="true">
+            <!-- AAOS 주행 중 화면 제한: 주행 중엔 조작 없는 한 줄 상태만 보여 주므로 주행 중 표시 허용 선언 -->
+            <meta-data android:name="distractionOptimized" android:value="true" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
