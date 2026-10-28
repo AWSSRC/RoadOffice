@@ -22,6 +22,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.roadoffice.app.BuildConfig
 import com.roadoffice.app.workmile.Gear
 import com.roadoffice.app.workmile.LatLng
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -163,8 +164,12 @@ class VehicleSignals(private val context: Context) {
         }.onFailure { log("경로 요청 실패: ${it.message}") }
     }
 
+    /**
+     * 이벤트 기록. 화면(신호 탭)용 목록은 메모리에만 두고, logcat 은 디버그 빌드에서만 남긴다
+     * (보안 가이드: 출시 빌드 로그에 거래처명·상담 내용 등 민감 정보 금지).
+     */
     fun log(msg: String) {
-        Log.i("RoadOffice", msg)
+        if (BuildConfig.DEBUG) Log.i("RoadOffice", msg)
         _log.tryEmit(msg)
     }
 

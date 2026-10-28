@@ -20,7 +20,8 @@ class GleoReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         val params = runCatching { JSONObject(unquote(intent.getStringExtra("ACTION_PARAM") ?: "{}")) }.getOrElse { JSONObject() }
         val graph = context.graph
-        graph.signals.log("Gleo 호출: $action $params")
+        // 발화 내용은 로그에 남기지 않는다 — 함수 이름과 인자 키만
+        graph.signals.log("Gleo 호출: $action ${params.keys().asSequence().toList()}")
         val pending = goAsync()
         graph.launch {
             try {

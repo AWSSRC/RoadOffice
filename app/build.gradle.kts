@@ -1,7 +1,14 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+}
+
+// release 서명 정보는 저장소 밖(keystore.properties, git 제외)에서 읽는다 — 키·비밀번호 하드코딩 금지
+val keystoreProps = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
 android {
@@ -14,11 +21,28 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
+        // Pleos 헤드유닛(arm64) + x86_64 에뮬레이터만 — SQLCipher 네이티브 라이브러리 용량 절감
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+    }
+
+    signingConfigs {
+        if (keystoreProps.isNotEmpty()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+                // Pleos: 사이닝 키 로테이션·리니지 지원(v3) — minSdk 28 이상
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {
@@ -30,6 +54,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"

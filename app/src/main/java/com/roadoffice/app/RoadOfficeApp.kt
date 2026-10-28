@@ -5,6 +5,7 @@ import android.content.Context
 import com.roadoffice.app.data.AppDatabase
 import com.roadoffice.app.data.ClientEntity
 import com.roadoffice.app.data.MeetingNoteEntity
+import com.roadoffice.app.data.SecurePrefs
 import com.roadoffice.app.data.TripEntity
 import com.roadoffice.app.meeting.Briefing
 import com.roadoffice.app.meeting.NoteAssistant
@@ -79,12 +80,13 @@ class AppGraph(private val context: Context) {
     var perKmRate: Int
         get() = settings.getInt("per_km_rate", 300)
         set(v) = settings.edit().putInt("per_km_rate", v).apply()
+    private val secure = SecurePrefs(context)
     var userName: String
-        get() = settings.getString("user_name", "") ?: ""
-        set(v) = settings.edit().putString("user_name", v).apply()
+        get() = secure.getString("user_name") ?: ""
+        set(v) = secure.putString("user_name", v)
     var department: String
-        get() = settings.getString("department", "") ?: ""
-        set(v) = settings.edit().putString("department", v).apply()
+        get() = secure.getString("department") ?: ""
+        set(v) = secure.putString("department", v)
 
     private var started = false
 
