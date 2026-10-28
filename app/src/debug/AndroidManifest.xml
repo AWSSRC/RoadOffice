@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- 디버그 전용: 시연 데이터 주입 (adb shell 에서만 호출, release 미포함) -->
+        <receiver android:name=".demo.DemoSeedReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.roadoffice.app.DEMO_SEED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
