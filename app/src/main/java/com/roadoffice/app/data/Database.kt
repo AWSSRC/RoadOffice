@@ -62,6 +62,8 @@ data class MeetingNoteEntity(
     /** rule / llm / server */
     val source: String,
     val tasksDone: Boolean = false,
+    /** 음성·Gleo 로 들어온 정리 — 정차 중에 사람이 확인하기 전까지 "확인 필요" */
+    val needsReview: Boolean = false,
 )
 
 /** 주유·충전 기록 — 주차 중 배터리·연료가 오른 것을 차량 신호로 포착. 금액은 사용자가 넣는다. */
@@ -120,6 +122,9 @@ interface MeetingNoteDao {
     @Query("SELECT COUNT(*) FROM meeting_notes WHERE tripId = :tripId")
     suspend fun countForTrip(tripId: Long): Int
 
+    @Query("UPDATE meeting_notes SET summary = :summary, tasks = :tasks, needsReview = 0 WHERE id = :id")
+    suspend fun review(id: Long, summary: String, tasks: String)
+
     @Query("UPDATE meeting_notes SET tasksDone = :done WHERE id = :id")
     suspend fun setDone(id: Long, done: Boolean)
 }
@@ -169,7 +174,7 @@ interface ClientDao {
     suspend fun delete(id: Long)
 }
 
-@Database(entities = [TripEntity::class, ClientEntity::class, MeetingNoteEntity::class, RefillEntity::class], version = 3, exportSchema = false)
+@Database(entities = [TripEntity::class, ClientEntity::class, MeetingNoteEntity::class, RefillEntity::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun trips(): TripDao
     abstract fun clients(): ClientDao
@@ -177,6 +182,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun refills(): RefillDao
 
     companion object {
+        /** v4: 상담 일지 "확인 필요" 표시 */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `meeting_notes` ADD COLUMN `needsReview` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /** v3: 주유·충전 기록 테이블 추가 — 기존 운행·상담 일지는 그대로 둔다 */
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -194,7 +206,7 @@ abstract class AppDatabase : RoomDatabase() {
             val passphrase = DbKeyStore(context).passphrase()
             return Room.databaseBuilder(context, AppDatabase::class.java, "roadoffice.db")
                 .openHelperFactory(SupportOpenHelperFactory(passphrase))
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 // v1 등 이전 개발 스키마만 초기화 (v2→v3 는 위 Migration 으로 데이터 유지)
                 .fallbackToDestructiveMigration()
                 .build()

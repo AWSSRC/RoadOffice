@@ -38,7 +38,9 @@ class RuleNoteAssistant : NoteAssistant {
         // "~기로 했어요"(가져가기로·만나기로 등)는 내가 한 약속 → 할 일
         val tasks = sentences.filter { s -> (taskWords.any { s.contains(it) } || promise.containsMatchIn(s)) && othersAction.none { s.contains(it) } }
             .map { tidyTask(it, now) }.distinct()
-        val summary = tidySummary(sentences.firstOrNull() ?: clean).let { if (it.length > 60) it.take(59) + "…" else it }
+        // 첫 문장이 거래처 이름으로 시작하면 빼고 요약 (거래처는 따로 표시된다)
+        val first = (sentences.firstOrNull() ?: clean).let { f -> clientName?.takeIf { it.isNotBlank() && f.startsWith(it) }?.let { f.removePrefix(it).trim() } ?: f }
+        val summary = tidySummary(first).let { if (it.length > 60) it.take(59) + "…" else it }
         return MeetingSummary(summary, tasks, findDate(clean, now), "rule")
     }
 
@@ -50,6 +52,10 @@ class RuleNoteAssistant : NoteAssistant {
         val due = if (sentence.contains("까지")) findDate(sentence, now) else null
         var t = sentence.replace(dateWords, "").trim()
         t = t.replace(Regex("^(에|에는|까지)\\s+"), "")
+        // "원장님이 (오전에) 전화 달라고 하셨어요" → "원장님께 (오전에) 전화하기" — 부탁받은 일
+        Regex("^([가-힣]{1,6}님)[이께서]{1,2}\\s+(.*?)(전화|연락|회신)\\s?(해\\s?)?(달라고|주라고)\\s?(하셨어요|하셨습니다|하심|했어요)$").find(t)?.let { m ->
+            t = "${m.groupValues[1]}께 ${m.groupValues[2]}${m.groupValues[3]}하기".replace(Regex("\\s+"), " ")
+        }
         t = t.replace(Regex("(보내|전달하|제출하|준비하|확인하|방문하|회신하|가져가|챙기)\\s?드리기로\\s?(했어요|했습니다|했음|함|했다)$"), "$1기")
             .replace(Regex("드리기로\\s?(했어요|했습니다|했음|함|했다)$"), "드리기")
             .replace(Regex("기로\\s?(했어요|했습니다|했음|함|했다)$"), "기")

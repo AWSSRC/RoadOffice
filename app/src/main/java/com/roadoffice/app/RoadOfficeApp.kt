@@ -11,6 +11,7 @@ import com.roadoffice.app.data.TripEntity
 import com.roadoffice.app.meeting.Briefing
 import com.roadoffice.app.meeting.DebriefTrigger
 import com.roadoffice.app.meeting.NoteAssistant
+import com.roadoffice.app.meeting.TermFixer
 import com.roadoffice.app.meeting.LlmNoteAssistant
 import com.roadoffice.app.meeting.Voice
 import com.roadoffice.app.vehicle.NaviEvent
@@ -296,17 +297,30 @@ class AppGraph(private val context: Context) {
         if (guestOnBoard) return
         _listening.value = true
         voice.listen(
-            onResult = { text -> _listening.value = false; addNote(text) },
+            onResult = { text -> _listening.value = false; addNote(text, fromVoice = true) },
             onError = { e -> _listening.value = false; signals.log("회고 음성 입력 실패($e) — 화면에서 입력할 수 있어요") },
         )
     }
 
-    /** 회고 텍스트 저장 (음성·화면 입력·Gleo 공통). 대기 중인 회고가 없으면 마지막 업무 운행에 붙인다. */
-    fun addNote(text: String, clientNameHint: String? = null) = scope.launch {
-        if (text.isBlank()) return@launch
+    /** 제품·용어 사전 (거래처 이름은 자동 포함) — 음성 인식 교정용 */
+    var terms: List<String>
+        get() = settings.getString("terms", "")!!.lines().filter { it.isNotBlank() }
+        set(v) = settings.edit().putString("terms", v.distinct().joinToString("\n")).apply()
+
+    /**
+     * 회고 텍스트 저장 (음성·화면 입력·Gleo 공통). 대기 중인 회고가 없으면 마지막 업무 운행에 붙인다.
+     * 음성·Gleo 로 온 말은 고유명사 사전(거래처·제품 이름)으로 고친 뒤 정리하고, 정차 중 확인 전까지 "확인 필요"로 둔다.
+     */
+    fun addNote(rawText: String, clientNameHint: String? = null, fromVoice: Boolean = false) = scope.launch {
+        if (rawText.isBlank()) return@launch
+        val fixed = if (fromVoice) TermFixer.fix(rawText, db.clients().all().map { it.name } + terms) else TermFixer.Result(rawText, emptyList())
+        if (fixed.fixes.isNotEmpty()) signals.log("사전 교정 ${fixed.fixes.size}곳")
+        val text = fixed.text
         val pending = _pendingDebrief.value
         val client = pending?.clientId?.let { db.clients().byId(it) }
             ?: clientNameHint?.let { hint -> db.clients().all().firstOrNull { it.name.contains(hint, true) || hint.contains(it.name, true) } }
+            // 말 속에 등록 거래처 이름이 있으면 그 거래처 (사전 교정 뒤라 "한빗 병원"도 잡힌다)
+            ?: db.clients().all().filter { text.replace(" ", "").contains(it.name.replace(" ", "")) }.maxByOrNull { it.name.length }
         val clientName = client?.name ?: pending?.clientName ?: clientNameHint
         val s = assistant.structure(text, clientName)
         db.notes().insert(
@@ -315,7 +329,8 @@ class AppGraph(private val context: Context) {
                 clientName = clientName,
                 tripId = pending?.tripId,
                 createdAt = System.currentTimeMillis(),
-                rawText = text,
+                rawText = rawText, // 원문은 인식된 그대로 (교정은 요약·할 일에만 반영)
+                needsReview = fromVoice,
                 summary = s.summary,
                 tasks = s.tasks.joinToString("\n"),
                 followUpAt = s.followUpAt,
@@ -500,6 +515,11 @@ class AppGraph(private val context: Context) {
         settings.edit().putLong("day_closed", today().first).apply()
         voice.speak("오늘 마감했어요.")
         signals.log("하루 마감 완료")
+    }
+
+    /** 정차 중 확인·수정 → "확인 필요" 해제 */
+    fun reviewNote(id: Long, summary: String, tasks: List<String>) = scope.launch {
+        db.notes().review(id, summary.trim(), tasks.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n"))
     }
 
     fun setTasksDone(noteId: Long, done: Boolean) = scope.launch { db.notes().setDone(noteId, done) }

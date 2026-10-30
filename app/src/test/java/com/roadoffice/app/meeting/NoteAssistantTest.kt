@@ -105,4 +105,17 @@ class DemoTalkTest {
         val r = RuleNoteAssistant().structure("약국장님이 샘플을 더 원하셨어요 내일 샘플 챙겨 가기로 했어요", "미래약국", now)
         org.junit.Assert.assertEquals(listOf("샘플 챙겨 가기"), r.tasks)
     }
+
+    @Test
+    fun `요약이 거래처 이름으로 시작하면 뺀다`() = kotlinx.coroutines.runBlocking {
+        val r = RuleNoteAssistant().structure("한빛병원 원장님이 신제품 반응이 좋대요", "한빛병원", now)
+        org.junit.Assert.assertEquals("원장님: 신제품 반응이 좋음", r.summary)
+    }
+
+    @Test
+    fun `부탁받은 연락은 할 일 문장으로`() = kotlinx.coroutines.runBlocking {
+        val r = RuleNoteAssistant().structure("원장님이 내일 오전에 전화 달라고 하셨어요", "새솔내과의원", now)
+        org.junit.Assert.assertEquals(listOf("원장님께 오전에 전화하기"), r.tasks)
+        org.junit.Assert.assertNotNull(r.followUpAt)
+    }
 }

@@ -360,16 +360,37 @@ private fun NotesTab(graph: AppGraph) {
     val listState = rememberLazyListState()
     LaunchedEffect(notes.firstOrNull()?.id) { if (notes.isNotEmpty()) listState.scrollToItem(0) }
     LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(notes, key = { it.id }) { n -> NoteRow(n) { graph.setTasksDone(n.id, !n.tasksDone) } }
+        items(notes, key = { it.id }) { n -> NoteRow(n, graph) { graph.setTasksDone(n.id, !n.tasksDone) } }
     }
 }
 
 @Composable
-private fun NoteRow(n: MeetingNoteEntity, onToggle: () -> Unit) {
+private fun NoteRow(n: MeetingNoteEntity, graph: AppGraph, onToggle: () -> Unit) {
+    var editing by remember(n.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(n.clientName ?: "거래처 미지정", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (n.needsReview && !editing) {
+                // 음성·Gleo 로 정리된 일지 — 정차 중에 맞는지 확인 (음성 인식 오류 대비)
+                Text("확인 필요 · 음성 정리", color = HyundaiBlue, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(end = 12.dp).clip(RoundedCornerShape(12.dp)).background(Warn).padding(horizontal = 12.dp, vertical = 4.dp))
+                Chip("맞아요", false) { graph.reviewNote(n.id, n.summary, n.tasks.lines()) }
+                Chip("고치기", false) { editing = true }
+                Spacer(Modifier.width(12.dp))
+            }
             Text(md.format(Date(n.createdAt)), color = Sub, fontSize = 20.sp)
+        }
+        if (editing) {
+            var summary by remember(n.id) { mutableStateOf(n.summary) }
+            var tasks by remember(n.id) { mutableStateOf(n.tasks) }
+            OutlinedTextField(value = summary, onValueChange = { summary = it.take(200) }, label = { Text("요약") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = tasks, onValueChange = { tasks = it.take(1000) }, label = { Text("할 일 (한 줄에 하나)") }, modifier = Modifier.fillMaxWidth())
+            Row(Modifier.padding(top = 8.dp)) {
+                Button(onClick = { graph.reviewNote(n.id, summary, tasks.lines()); editing = false }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue), modifier = Modifier.height(64.dp)) { Text("저장", fontSize = 22.sp) }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = { editing = false }, modifier = Modifier.height(64.dp)) { Text("취소", fontSize = 22.sp, color = Color.White) }
+            }
+            return@Column
         }
         Text(n.summary, color = Color.White, fontSize = 23.sp)
         n.tasks.lines().filter { it.isNotBlank() }.forEach { t ->
@@ -395,6 +416,8 @@ private fun ClientsTab(graph: AppGraph) {
         ) { Text("현재 위치로 등록", fontSize = 24.sp) }
     }
     Text(if (here == null) "현재 위치를 받지 못했어요 — 이름으로만 인식합니다." else "현재 위치 %.5f, %.5f".format(here!!.lat, here!!.lon), color = Sub, fontSize = 20.sp)
+    Spacer(Modifier.height(12.dp))
+    TermsEditor(graph)
     Spacer(Modifier.height(16.dp))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(clients, key = { it.id }) { c -> ClientRow(c) { graph.deleteClient(c.id) } }
@@ -451,3 +474,23 @@ internal fun Purpose.label() = when (this) {
 }
 
 internal fun won(v: Long) = NumberFormat.getInstance(Locale.KOREA).format(v) + "원"
+
+/** 제품·용어 사전 — 음성 인식이 틀리기 쉬운 이름을 등록 (거래처 이름은 자동 포함). 누르면 삭제. */
+@Composable
+private fun TermsEditor(graph: AppGraph) {
+    var terms by remember { mutableStateOf(graph.terms) }
+    var input by remember { mutableStateOf("") }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(value = input, onValueChange = { input = it.take(30) }, singleLine = true, label = { Text("제품·용어 사전") }, modifier = Modifier.width(360.dp))
+        Spacer(Modifier.width(12.dp))
+        Button(
+            onClick = { if (input.isNotBlank()) { terms = (terms + input.trim()).distinct(); graph.terms = terms; input = "" } },
+            colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue), modifier = Modifier.height(64.dp),
+        ) { Text("추가", fontSize = 22.sp) }
+        Spacer(Modifier.width(16.dp))
+        Text("음성 정리 때 거래처·제품 이름을 이 사전대로 고쳐요", color = Sub, fontSize = 20.sp)
+    }
+    if (terms.isNotEmpty()) Row(Modifier.padding(top = 8.dp)) {
+        terms.take(8).forEach { t -> Chip("$t ✕", false) { terms = terms - t; graph.terms = terms } }
+    }
+}
