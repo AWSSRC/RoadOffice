@@ -95,6 +95,9 @@ class AppGraph(private val context: Context) {
     val activeTrip: StateFlow<ActiveTrip?> = _activeTrip
     private val _pendingDebrief = MutableStateFlow<PendingDebrief?>(null)
     val pendingDebrief: StateFlow<PendingDebrief?> = _pendingDebrief
+    private val _lastBrief = MutableStateFlow<String?>(null)
+    /** 방금 읽은 브리핑 — 주행 화면에 15초간 한 줄로 (소리로 놓쳐도 다시 볼 수 있게) */
+    val lastBrief: StateFlow<String?> = _lastBrief
     private val _listening = MutableStateFlow(false)
     val listening: StateFlow<Boolean> = _listening
     private val briefedThisTrip = mutableSetOf<Long>()
@@ -336,6 +339,9 @@ class AppGraph(private val context: Context) {
         val open = notes.filter { !it.tasksDone }.flatMap { it.tasks.lines() }.filter { it.isNotBlank() }
         val text = Briefing.text(c.name, notes.firstOrNull()?.summary, open, db.trips().visits(c.id), arriving = !force)
         voice.speak(text)
+        val line = Briefing.short(c.name, open)
+        _lastBrief.value = line
+        scope.launch { delay(15_000); if (_lastBrief.value == line) _lastBrief.value = null }
         return text
     }
 

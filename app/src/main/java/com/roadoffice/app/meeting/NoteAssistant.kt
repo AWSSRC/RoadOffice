@@ -69,6 +69,10 @@ class RuleNoteAssistant : NoteAssistant {
 
 /** 미팅 전 브리핑 문장 (TTS 로 읽기 좋게 3문장 이내). */
 object Briefing {
+    /** 주행 화면용 한 줄 — 한눈(2초)에 읽히게 거래처와 첫 할 일만. */
+    fun short(clientName: String, openTasks: List<String>): String =
+        "$clientName · " + if (openTasks.isEmpty()) "남은 할 일 없음" else "할 일 ${openTasks.size}: ${openTasks.first()}"
+
     fun text(clientName: String, lastSummary: String?, openTasks: List<String>, visits: Int, arriving: Boolean = true): String = buildString {
         append(if (arriving) "곧 ${clientName}에 도착합니다. " else "$clientName 브리핑입니다. ")
         if (lastSummary == null) {

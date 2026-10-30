@@ -63,4 +63,10 @@ class LlmParseTest {
         assertNull(parse("{\"summary\":\"\",\"tasks\":[]}"))
         assertNull(parse("모르겠어요"))
     }
+
+    @Test
+    fun `주행 화면 브리핑은 한 줄 - 거래처와 첫 할 일만`() {
+        org.junit.Assert.assertEquals("한빛병원 · 할 일 2: 수정 견적서 보내기", Briefing.short("한빛병원", listOf("수정 견적서 보내기", "샘플 전달")))
+        org.junit.Assert.assertEquals("한빛병원 · 남은 할 일 없음", Briefing.short("한빛병원", emptyList()))
+    }
 }

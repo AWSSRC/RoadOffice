@@ -96,6 +96,12 @@ private fun DrivingView(graph: AppGraph) {
         val listening by graph.listening.collectAsState()
         val debrief by graph.pendingDebrief.collectAsState()
         if (listening) Text("🎙 듣고 있어요… ${if (guest) "" else debrief?.clientName ?: ""} 미팅 이야기를 말씀해 주세요", color = Active, fontSize = 30.sp)
+        val brief by graph.lastBrief.collectAsState()
+        if (!guest) brief?.let {
+            Spacer(Modifier.height(20.dp))
+            Text("🔊 $it", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Card).padding(horizontal = 24.dp, vertical = 16.dp))
+        }
         if (guest) {
             Spacer(Modifier.height(16.dp))
             Text("동승자 탑승 중 · 거래처·상담 내용은 소리 내 읽지 않아요", color = Warn, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)

@@ -104,6 +104,14 @@ class DemoSeedReceiver : BroadcastReceiver() {
             }
             day.add(Calendar.DAY_OF_MONTH, 1)
         }
+        // 한빛병원 최근 상담 — 다음 방문 브리핑에 남은 할 일이 나오게
+        g.db.notes().insert(
+            MeetingNoteEntity(
+                clientId = clients["한빛병원"]?.id, clientName = "한빛병원", tripId = null, createdAt = now - 2 * 24 * 3_600_000L,
+                rawText = "원장님이 견적 금액 조정 원하심, 금요일까지 수정 견적 보내기로", summary = "원장님 견적 금액 조정 요청",
+                tasks = "수정 견적서 보내기", followUpAt = null, source = "rule",
+            ),
+        )
         // 내일 후속 일정 1건 (하루 마감의 "내일 일정" 시연)
         val tomorrow = Calendar.getInstance().apply { timeInMillis = now; add(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 10) }.timeInMillis
         g.db.notes().insert(
