@@ -9,6 +9,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
@@ -175,13 +177,25 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun refills(): RefillDao
 
     companion object {
+        /** v3: 주유·충전 기록 테이블 추가 — 기존 운행·상담 일지는 그대로 둔다 */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `refills` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` TEXT NOT NULL, " +
+                        "`startedAt` INTEGER NOT NULL, `fromPct` INTEGER NOT NULL, `toPct` INTEGER NOT NULL, `lat` REAL, `lon` REAL, " +
+                        "`place` TEXT, `amount` INTEGER, `purpose` TEXT NOT NULL)",
+                )
+            }
+        }
+
         /** SQLCipher 로 DB 파일 전체를 암호화. 암호키는 [DbKeyStore] 가 Keystore 로 감싸 보관한다. */
         fun open(context: Context): AppDatabase {
             System.loadLibrary("sqlcipher")
             val passphrase = DbKeyStore(context).passphrase()
             return Room.databaseBuilder(context, AppDatabase::class.java, "roadoffice.db")
                 .openHelperFactory(SupportOpenHelperFactory(passphrase))
-                // 개발 단계: 스키마 변경 시 시험 데이터 초기화. 출시 전 Migration 으로 교체
+                .addMigrations(MIGRATION_2_3)
+                // v1 등 이전 개발 스키마만 초기화 (v2→v3 는 위 Migration 으로 데이터 유지)
                 .fallbackToDestructiveMigration()
                 .build()
         }

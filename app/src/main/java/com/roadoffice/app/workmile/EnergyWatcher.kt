@@ -14,6 +14,21 @@ data class Refill(val kind: EnergyKind, val startedAt: Long, val fromPct: Int, v
  * - 센서 흔들림(1~2%p)·주행 중 변화는 무시한다
  */
 class EnergyWatcher(private val kind: EnergyKind, private val minRisePct: Int = 5) {
+    /** 앱이 다시 시작돼도 이어 가도록 저장할 주차 상태 (주차 시작 시각, 그때까지의 최저값). */
+    data class Snapshot(val parkedAt: Long, val low: Int)
+
+    fun snapshot(): Snapshot? {
+        val at = parkedAt ?: return null
+        val l = low ?: return null
+        return Snapshot(at, l)
+    }
+
+    /** 앱 시작 때 저장해 둔 주차 상태로 되돌린다 — 꺼져 있는 동안 오른 배터리·연료도 포착된다. */
+    fun restore(s: Snapshot) {
+        if (parkedAt != null) return
+        parkedAt = s.parkedAt; low = s.low; from = s.low; to = s.low
+    }
+
     private var parkedAt: Long? = null
     private var low: Int? = null      // 지금까지의 최저값
     private var from: Int? = null     // 가장 크게 오른 구간의 시작

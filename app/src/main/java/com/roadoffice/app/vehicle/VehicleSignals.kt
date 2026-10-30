@@ -173,7 +173,10 @@ class VehicleSignals(private val context: Context) {
             Seat.DRIVER to SeatValue.ROW_1_LEFT, Seat.PASSENGER to SeatValue.ROW_1_RIGHT,
             Seat.REAR_LEFT to SeatValue.ROW_2_LEFT, Seat.REAR_RIGHT to SeatValue.ROW_2_RIGHT,
         )
-        fun update(seat: Seat, raw: Boolean?) {
+        // 구독 직후 SDK 가 임시 값(대개 true)을 몇 번 먼저 보낸다 → 좌석별로 조회(get) 결과가 온 뒤부터 이벤트를 믿는다
+        val ready = java.util.concurrent.ConcurrentHashMap.newKeySet<Seat>()
+        fun update(seat: Seat, raw: Boolean?, fromGet: Boolean) {
+            if (fromGet) ready.add(seat) else if (seat !in ready) return
             if (raw == null) return
             rawSeats[seat] = raw
             publishCabin()
@@ -181,9 +184,9 @@ class VehicleSignals(private val context: Context) {
         seats.forEach { (seat, value) ->
             val area = SeatArea(value)
             runCatching {
-                v.getSeat().getCurrentSeatOccupancy(area, { update(seat, it) }, { log("좌석(${seat.name}) 조회 실패: ${it.message}") })
+                v.getSeat().getCurrentSeatOccupancy(area, { update(seat, it, fromGet = true) }, { ready.add(seat); log("좌석(${seat.name}) 조회 실패: ${it.message}") })
                 v.getSeat().registerSeatOccupancy(area, object : SeatOccupancyListener {
-                    override fun onSeatOccupancyUpdated(value: Boolean?) = update(seat, value)
+                    override fun onSeatOccupancyUpdated(value: Boolean?) = update(seat, value, fromGet = false)
                     override fun onFailed(exception: Exception) = log("좌석(${seat.name}) 구독 실패: ${exception.message}")
                 })
             }.onFailure { log("좌석 점유 미지원: ${it.message}") }
@@ -199,11 +202,11 @@ class VehicleSignals(private val context: Context) {
         _cabin.value = now
     }
 
-    /** 주행 중(10km/h 이상)이면 운전석에 사람이 있다 → 좌석 값의 뜻을 맞춘다 ([SeatCalibration]). */
+    /** 주행 중(D단·10km/h 이상)이면 운전석에 사람이 있다 → 좌석 값의 뜻을 맞춘다 ([SeatCalibration], 5초 이상 같은 값일 때). */
     private fun calibrateSeats(speedKmh: Float) {
-        if (speedKmh < 10f || _gear.value != Gear.DRIVE) return
+        if (speedKmh < 10f || _gear.value != Gear.DRIVE) { seatCal.onNotDriving(); return }
         val raw = rawSeats[Seat.DRIVER] ?: return
-        if (seatCal.onDriving(raw)) {
+        if (seatCal.onDriving(raw, System.currentTimeMillis())) {
             prefs.edit().putBoolean("seat_inverted", seatCal.inverted == true).apply()
             log("좌석 센서 보정: ${if (seatCal.inverted == true) "값 반전(SDK 2.3.2)" else "표준"}")
             publishCabin()

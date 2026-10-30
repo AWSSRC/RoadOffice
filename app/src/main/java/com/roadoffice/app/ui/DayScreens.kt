@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,11 +37,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roadoffice.app.AppGraph
 import com.roadoffice.app.data.RefillEntity
+import com.roadoffice.app.workmile.ClaimMode
 import com.roadoffice.app.workmile.EnergyKind
 import com.roadoffice.app.workmile.Purpose
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 private val BannerBlue = Color(0xFF00597A)
 private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
@@ -60,9 +66,9 @@ internal fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .padding(end = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(if (on) Active else Card)
+            .background(if (on) Active else HyundaiBlue) // 카드 위에서도 버튼으로 보이게
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 18.dp, vertical = 16.dp), // 터치 높이 약 64dp
     )
 }
 
@@ -71,12 +77,20 @@ internal fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
 internal fun PrivacyChip(graph: AppGraph) {
     val privacy by graph.privacy.collectAsState()
     val cabin by graph.signals.cabin.collectAsState()
+    var confirmOff by remember { mutableStateOf(false) }
     val text = when {
         !privacy -> "동승자 보호 꺼짐"
-        !cabin.known -> "동승자 보호 · 좌석 센서 없음"
+        !cabin.known -> "좌석 센서 없음 · 자동 보호 안 됨"
         cabin.guestOnBoard -> "동승자 탑승 · 보호 중"
         else -> "동승자 보호 켬"
     }
+    if (confirmOff) AlertDialog(
+        onDismissRequest = { confirmOff = false },
+        title = { Text("동승자 보호를 끌까요?", fontSize = 28.sp) },
+        text = { Text("옆·뒷자리에 사람이 있어도 거래처 이름과 상담 내용을 소리로 읽고 화면에 보여 줘요.", fontSize = 22.sp) },
+        confirmButton = { TextButton(onClick = { graph.setPrivacy(false); confirmOff = false }) { Text("끄기", fontSize = 22.sp) } },
+        dismissButton = { TextButton(onClick = { confirmOff = false }) { Text("취소", fontSize = 22.sp) } },
+    )
     Text(
         text,
         color = if (privacy && cabin.guestOnBoard) HyundaiBlue else Color.White,
@@ -85,7 +99,7 @@ internal fun PrivacyChip(graph: AppGraph) {
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(if (privacy && cabin.guestOnBoard) Warn else Card)
-            .clickable { graph.setPrivacy(!privacy) }
+            .clickable { if (privacy) confirmOff = true else graph.setPrivacy(true) }
             .padding(horizontal = 18.dp, vertical = 10.dp),
     )
 }
@@ -96,7 +110,14 @@ internal fun PrivacyGate(graph: AppGraph, what: String): Boolean {
     val cabin by graph.signals.cabin.collectAsState()
     val guest = rememberGuest(graph)
     var revealed by remember(cabin.occupied) { mutableStateOf(false) }
-    if (!guest || revealed) return true
+    LaunchedEffect(revealed) { if (revealed) { delay(30_000); revealed = false } } // "잠깐" 보기 — 30초 뒤 다시 가림
+    if (!guest) return true
+    if (revealed) {
+        Text("동승자 탑승 중 · 30초 뒤 다시 가려요", color = HyundaiBlue, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Warn).padding(horizontal = 16.dp, vertical = 6.dp))
+        Spacer(Modifier.height(8.dp))
+        return true
+    }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card).padding(32.dp)) {
         Text("동승자가 있어 $what 화면을 가렸어요", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
@@ -119,12 +140,13 @@ private fun AmountEditor(graph: AppGraph, r: RefillEntity) {
         modifier = Modifier.width(200.dp),
     )
     Spacer(Modifier.width(8.dp))
-    Button(onClick = { graph.setRefillAmount(r.id, text.toLongOrNull()) }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue)) {
+    Button(onClick = { graph.setRefillAmount(r.id, text.toLongOrNull()) }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue), modifier = Modifier.height(64.dp)) {
         Text("저장", fontSize = 22.sp)
     }
 }
 
 private fun RefillEntity.title() = "${EnergyKind.valueOf(kind).label} ${fromPct}% → ${toPct}%"
+private fun RefillEntity.verb() = if (kind == EnergyKind.EV_CHARGE.name) "충전" else "주유"
 
 @Composable
 internal fun RefillRow(graph: AppGraph, r: RefillEntity) {
@@ -134,7 +156,11 @@ internal fun RefillRow(graph: AppGraph, r: RefillEntity) {
     ) {
         Column(Modifier.weight(1f)) {
             Text("${mdhm.format(Date(r.startedAt))}  ·  ${r.title()}", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text((r.place ?: "장소 미상") + "  ·  " + (r.amount?.let { won(it) } ?: "금액 미입력"), color = if (r.amount == null) Warn else Sub, fontSize = 20.sp)
+            val guest = rememberGuest(graph)
+            Row {
+                Text((if (guest && r.place != null) "업무 방문지" else r.place ?: "장소 미상") + "  ·  ", color = Sub, fontSize = 20.sp)
+                Text(r.amount?.let { won(it) } ?: "금액 미입력", color = if (r.amount == null) Warn else Sub, fontSize = 20.sp)
+            }
         }
         listOf(Purpose.BUSINESS, Purpose.PERSONAL).forEach { p -> Chip(p.label(), r.purpose == p.name) { graph.setRefillPurpose(r.id, p) } }
         Spacer(Modifier.width(8.dp))
@@ -142,25 +168,36 @@ internal fun RefillRow(graph: AppGraph, r: RefillEntity) {
     }
 }
 
-/** 주차 중 충전·주유가 포착되면 바로 뜨는 배너 — 금액만 넣으면 정산에 들어간다. */
+/**
+ * 주차 중 충전·주유가 포착되면 바로 뜨는 배너 — 실비 정산일 때만 금액을 묻는다
+ * (km 단가 정산은 기록용이라 워크마일 탭에만 남긴다). 회고 배너가 있으면 한 줄로 접는다.
+ */
 @Composable
-internal fun RefillBanner(graph: AppGraph) {
-    val (from, to) = remember { dayRange() }
+internal fun RefillBanner(graph: AppGraph, collapsed: Boolean) {
+    if (graph.claimMode != ClaimMode.ACTUAL) return
+    val from = remember { graph.monthStart() }
+    val to = remember { dayRange().second }
     val refills by graph.db.refills().observeBetween(from, to).collectAsState(initial = emptyList())
     var hidden by remember { mutableStateOf(setOf<Long>()) }
-    val r = refills.firstOrNull { it.amount == null && it.id !in hidden } ?: return
+    val waiting = refills.filter { it.amount == null && it.purpose != Purpose.PERSONAL.name && it.id !in hidden }
+    val r = waiting.firstOrNull() ?: return
+    if (collapsed) {
+        Text("주유·충전 ${waiting.size}건 금액 대기 — 워크마일 탭에서 넣을 수 있어요", color = Sub, fontSize = 20.sp, modifier = Modifier.padding(top = 6.dp))
+        return
+    }
     Row(
         Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).background(BannerBlue).padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("${r.title()} 포착", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text("${hm.format(Date(r.startedAt))} 주차 중 · 차량 ${if (r.kind == EnergyKind.EV_CHARGE.name) "배터리" else "연료"} 신호 기준 · 금액만 넣으면 정산 끝", color = Sub, fontSize = 20.sp)
+            Text("${r.title()} ${r.verb()}했어요", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("${hm.format(Date(r.startedAt))} · 업무용이면 금액을 넣어 주세요 (실비 정산)", color = Sub, fontSize = 20.sp)
         }
         listOf(Purpose.BUSINESS, Purpose.PERSONAL).forEach { p -> Chip(p.label(), r.purpose == p.name) { graph.setRefillPurpose(r.id, p) } }
         Spacer(Modifier.width(8.dp))
         AmountEditor(graph, r)
-        Text("나중에", color = Color.White, fontSize = 22.sp, modifier = Modifier.clickable { hidden = hidden + r.id }.padding(12.dp))
+        Spacer(Modifier.width(8.dp))
+        OutlinedButton(onClick = { hidden = hidden + r.id }, modifier = Modifier.height(64.dp)) { Text("나중에", fontSize = 22.sp, color = Color.White) }
     }
 }
 
@@ -168,12 +205,16 @@ internal fun RefillBanner(graph: AppGraph) {
 @Composable
 internal fun DayClosePanel(graph: AppGraph) {
     val (from, to) = remember { dayRange() }
+    val month = remember { graph.monthStart() }
     val trips by graph.db.trips().observeBetween(from, to).collectAsState(initial = emptyList())
-    val refills by graph.db.refills().observeBetween(from, to).collectAsState(initial = emptyList())
+    // 미분류·금액 미입력은 이번 달에 남은 것 전부 — "내일 다시"가 실제로 다시 보이게
+    val monthTrips by graph.db.trips().observeBetween(month, to).collectAsState(initial = emptyList())
+    val refills by graph.db.refills().observeBetween(month, to).collectAsState(initial = emptyList())
     val notes by graph.db.notes().observeAll().collectAsState(initial = emptyList())
     val guest = rememberGuest(graph)
-    val unknown = trips.filter { it.purpose == Purpose.UNKNOWN.name }
-    val missing = refills.filter { it.amount == null }
+    val unknown = monthTrips.filter { it.purpose == Purpose.UNKNOWN.name }
+    // km 단가 정산이면 주유·충전 금액은 필요 없다
+    val missing = if (graph.claimMode == ClaimMode.ACTUAL) refills.filter { it.amount == null && it.purpose != Purpose.PERSONAL.name } else emptyList()
     val open = notes.filter { n -> !n.tasksDone && n.tasks.isNotBlank() }
     val openCount = open.sumOf { n -> n.tasks.lines().count { it.isNotBlank() } }
     val tomorrow = notes.filter { !it.tasksDone && (it.followUpAt ?: 0) in to until to + 24 * 60 * 60 * 1000L }
@@ -181,10 +222,12 @@ internal fun DayClosePanel(graph: AppGraph) {
 
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { graph.cancelDayClose() }, modifier = Modifier.height(64.dp)) { Text("← 돌아가기", fontSize = 22.sp, color = Color.White) }
+            Spacer(Modifier.width(20.dp))
             Text("오늘 마감 30초", color = Active, fontSize = 34.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(20.dp))
             Text("차에서 내리기 전에 오늘 정리를 끝내요", color = Sub, fontSize = 22.sp, modifier = Modifier.weight(1f))
-            Text("나중에", color = Color.White, fontSize = 22.sp, modifier = Modifier.clickable { graph.cancelDayClose() }.padding(12.dp))
+            PrivacyChip(graph)
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -196,7 +239,7 @@ internal fun DayClosePanel(graph: AppGraph) {
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (unknown.isNotEmpty()) {
                 item { Section("미분류 운행 — 업무·개인을 골라 주세요") }
-                items(unknown, key = { "t${it.id}" }) { t -> TripRow(t) { p -> graph.setPurpose(t.id, p) } }
+                items(unknown, key = { "t${it.id}" }) { t -> TripRow(t, guest) { p -> graph.setPurpose(t.id, p) } }
             }
             if (missing.isNotEmpty()) {
                 item { Section("금액을 안 넣은 주유·충전") }
@@ -228,7 +271,7 @@ internal fun DayClosePanel(graph: AppGraph) {
             onClick = { graph.finishDayClose() },
             colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue),
             modifier = Modifier.fillMaxWidth().height(72.dp),
-        ) { Text(if (left == 0) "마감 완료" else "이대로 마감 (남은 ${left}건은 내일 다시)", fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+        ) { Text(if (left == 0) "마감 완료" else "이대로 마감 (남은 ${left}건은 내일 마감 때 다시 보여요)", fontSize = 26.sp, fontWeight = FontWeight.Bold) }
     }
 }
 

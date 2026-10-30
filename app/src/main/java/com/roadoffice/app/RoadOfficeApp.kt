@@ -37,7 +37,11 @@ import com.roadoffice.app.workmile.distanceMeters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -55,6 +59,12 @@ class RoadOfficeApp : Application() {
 }
 
 val Context.graph: AppGraph get() = (applicationContext as RoadOfficeApp).graph
+
+/** 주유·충전 판단에 들어가는 신호 — 한 줄로 세워 순서대로 처리한다 (동시 처리 시 기록 중복 방지). */
+private sealed interface EnergyEvent {
+    data class GearChanged(val gear: Gear, val now: Long, val soc: Int?, val fuel: Int?) : EnergyEvent
+    data class Level(val kind: EnergyKind, val pct: Int?, val now: Long) : EnergyEvent
+}
 
 /** 회고 대기 상태 — 미팅을 마치고 차에 다시 타면 "미팅 어땠어요?" 를 묻는다. */
 data class PendingDebrief(val tripId: Long, val clientId: Long?, val clientName: String)
@@ -88,10 +98,15 @@ class AppGraph(private val context: Context) {
     private val _listening = MutableStateFlow(false)
     val listening: StateFlow<Boolean> = _listening
     private val briefedThisTrip = mutableSetOf<Long>()
-    private val debriefTrigger = DebriefTrigger(if (BuildConfig.DEBUG) 10_000L else MIN_MEETING_MS)
+    /** 이만큼 차를 떠나 있었으면 미팅으로 본다 (디버그 빌드는 시연용으로 짧게) */
+    private val minMeetingMs = if (BuildConfig.DEBUG) 10_000L else MIN_MEETING_MS
+    private val debriefTrigger = DebriefTrigger(minMeetingMs)
     private val energy = mapOf(EnergyKind.EV_CHARGE to EnergyWatcher(EnergyKind.EV_CHARGE), EnergyKind.FUEL to EnergyWatcher(EnergyKind.FUEL))
-    /** 이번 주차에서 포착 중인 주유·충전의 DB id */
-    private val refillIds = mutableMapOf<EnergyKind, Long>()
+    private val energyEvents = Channel<EnergyEvent>(Channel.UNLIMITED)
+    /** 동승자 때문에 소리 내지 못한 회고 — 동승자가 내리면 다시 묻는다 */
+    @Volatile private var debriefHeld = false
+    /** 동승자 탑승으로 보류한 브리핑 로그를 운행당 한 번만 남기기 위함 */
+    private val heldThisTrip = mutableSetOf<Long>()
     private val _dayClose = MutableStateFlow(false)
     /** 하루 마감 화면을 띄울지 */
     val dayClose: StateFlow<Boolean> = _dayClose
@@ -138,24 +153,39 @@ class AppGraph(private val context: Context) {
                     _activeTrip.value = recorder.active
                 }
                 if (g != Gear.UNKNOWN) signals.log("기어: ${g.name}")
-                // 주차 중 오른 배터리·연료 → 출발할 때 최종 값으로 확정
-                energy[EnergyKind.EV_CHARGE]!!.onGear(g, now, signals.socPct.value)?.let { onRefill(it, final = true) }
-                energy[EnergyKind.FUEL]!!.onGear(g, now, signals.fuelPct.value)?.let { onRefill(it, final = true) }
-                // 좌석 센서가 없는 차: 예전처럼 출발 순간에 회고를 묻는다
-                if (prev == Gear.PARK && g != Gear.PARK && g != Gear.UNKNOWN && !signals.cabin.value.known) askDebrief(delayMs = 4_000)
-                if (g == Gear.PARK) briefedThisTrip.clear()
+                energyEvents.trySend(EnergyEvent.GearChanged(g, now, signals.socPct.value, signals.fuelPct.value))
+                // 회고는 출발 전(착석)이 기본, 그때 못 물었으면(센서 없음·짧은 정차·앱 재시작) 출발 순간에 한 번
+                if (prev == Gear.PARK && g != Gear.PARK && g != Gear.UNKNOWN) askDebrief(delayMs = 4_000)
+                if (g == Gear.PARK) { briefedThisTrip.clear(); heldThisTrip.clear() }
                 prev = g
             }
         }
         // 미팅 후 차에 다시 탐(P단·운전석 착석) → 회고
         scope.launch {
+            var wasGuest = false
             signals.cabin.collect { c ->
                 if (!c.known) return@collect
-                if (debriefTrigger.onSeat(c.driverSeated, signals.gear.value, System.currentTimeMillis())) askDebrief(delayMs = 1_500)
+                val now = System.currentTimeMillis()
+                val guest = guestOnBoard
+                if (guest && !wasGuest) voice.stop() // 읽던 업무 내용이 있으면 동승자가 앉는 순간 끊는다
+                // 동승자가 내렸고 보류한 회고가 있으면 이제 묻는다
+                if (!guest && wasGuest && debriefHeld && signals.gear.value == Gear.PARK) speakDebrief()
+                wasGuest = guest
+                if (debriefTrigger.onSeat(c.driverSeated, signals.gear.value, now)) askDebrief(delayMs = 1_500)
             }
         }
-        scope.launch { signals.socPct.collect { pct -> energy[EnergyKind.EV_CHARGE]!!.onLevel(pct, System.currentTimeMillis())?.let { onRefill(it, final = false) } } }
-        scope.launch { signals.fuelPct.collect { pct -> energy[EnergyKind.FUEL]!!.onLevel(pct, System.currentTimeMillis())?.let { onRefill(it, final = false) } } }
+        // 실차: 차에서 내리면 헤드유닛이 꺼져 "자리 비움"을 못 본다 → 앱이 P단·착석 상태로 시작되면 직전 주차를 미팅으로 본다
+        scope.launch {
+            val (c, g) = withTimeoutOrNull(30_000) {
+                combine(signals.cabin, signals.gear) { c, g -> c to g }.first { it.first.known && it.second != Gear.UNKNOWN }
+            } ?: return@launch
+            if (c.driverSeated && g == Gear.PARK) askDebrief(delayMs = 3_000, minSinceParkMs = minMeetingMs)
+        }
+        // 주유·충전: 신호를 한 줄로 받아 순서대로 판단·저장
+        restoreEnergy()
+        scope.launch { signals.socPct.collect { energyEvents.trySend(EnergyEvent.Level(EnergyKind.EV_CHARGE, it, System.currentTimeMillis())) } }
+        scope.launch { signals.fuelPct.collect { energyEvents.trySend(EnergyEvent.Level(EnergyKind.FUEL, it, System.currentTimeMillis())) } }
+        scope.launch { for (e in energyEvents) handleEnergy(e) }
         scope.launch {
             signals.odometerKm.collect { km -> if (km != null) lock.withLock { recorder.onOdometer(km) } }
         }
@@ -227,26 +257,39 @@ class AppGraph(private val context: Context) {
     // ── 회고 (미팅 후) ─────────────────────────────────────────────
 
     /**
-     * 직전 운행이 업무 방문이고 아직 메모가 없으면 회고 요청.
-     * 좌석 센서가 있으면 미팅 후 차에 다시 탄 순간(출발 전), 없으면 출발 순간에 불린다.
-     * 동승자가 있으면 소리 내 묻지 않고 화면 배너만 남긴다.
+     * 직전 운행이 업무 방문이고 아직 묻지 않았고 메모도 없으면 회고 요청 (운행당 한 번).
+     * 미팅 후 차에 다시 탄 순간(출발 전)이 기본이고, 그때 못 물었으면 출발 순간에 불린다.
+     * 동승자가 있으면 소리 내 묻지 않고 화면 배너만 남겼다가, 동승자가 내리면 묻는다.
      */
-    private fun askDebrief(delayMs: Long) = scope.launch {
+    private fun askDebrief(delayMs: Long, minSinceParkMs: Long = 0) = scope.launch {
         val last = db.trips().latest() ?: return@launch
         val name = last.destinationName ?: return@launch
+        val now = System.currentTimeMillis()
         if (last.purpose != Purpose.BUSINESS.name) return@launch
-        if (System.currentTimeMillis() - last.endAt > DEBRIEF_WINDOW_MS) return@launch
+        if (now - last.endAt > DEBRIEF_WINDOW_MS || now - last.endAt < minSinceParkMs) return@launch
+        if (settings.getLong("debrief_asked_trip", -1) == last.id) return@launch
         if (db.notes().countForTrip(last.id) > 0) return@launch
+        settings.edit().putLong("debrief_asked_trip", last.id).apply()
         _pendingDebrief.value = PendingDebrief(last.id, last.clientId, name)
         delay(delayMs)
-        if (guestOnBoard) { signals.log("동승자 탑승 — 회고 질문은 화면에만 표시"); return@launch }
-        voice.speak("$name 미팅 어땠어요? 출발 전에 말씀하시면 상담 일지로 정리할게요.") {
-            _listening.value = true
-            voice.listen(
-                onResult = { text -> _listening.value = false; addNote(text) },
-                onError = { e -> _listening.value = false; signals.log("회고 음성 입력 실패($e) — 정차 후 화면에서 입력할 수 있어요") },
-            )
-        }
+        speakDebrief()
+    }
+
+    private fun speakDebrief() {
+        val p = _pendingDebrief.value ?: return
+        if (guestOnBoard) { debriefHeld = true; signals.log("동승자 탑승 — 회고 질문은 화면에만 표시"); return }
+        debriefHeld = false
+        voice.speak("${p.clientName} 미팅 어땠어요? 말씀하시면 상담 일지로 정리할게요.") { listenDebrief() }
+    }
+
+    /** 회고 듣기 (질문 뒤 자동, 또는 화면의 "말하기" 버튼). */
+    fun listenDebrief() {
+        if (guestOnBoard) return
+        _listening.value = true
+        voice.listen(
+            onResult = { text -> _listening.value = false; addNote(text) },
+            onError = { e -> _listening.value = false; signals.log("회고 음성 입력 실패($e) — 화면에서 입력할 수 있어요") },
+        )
     }
 
     /** 회고 텍스트 저장 (음성·화면 입력·Gleo 공통). 대기 중인 회고가 없으면 마지막 업무 운행에 붙인다. */
@@ -271,11 +314,12 @@ class AppGraph(private val context: Context) {
             ),
         )
         _pendingDebrief.value = null
+        debriefHeld = false
         signals.log("상담 일지 저장: ${clientName ?: "거래처 미지정"} · 할 일 ${s.tasks.size}개")
         voice.speak(if (s.tasks.isEmpty() || guestOnBoard) "상담 일지에 저장했어요." else "저장했어요. 할 일 ${s.tasks.size}개, ${s.tasks.first()}.")
     }
 
-    fun dismissDebrief() { _pendingDebrief.value = null }
+    fun dismissDebrief() { _pendingDebrief.value = null; debriefHeld = false }
 
     // ── 브리핑 (미팅 전) ───────────────────────────────────────────
 
@@ -286,7 +330,7 @@ class AppGraph(private val context: Context) {
 
     /** 거래처 브리핑 문장을 만들어 읽는다. 같은 운행에서 같은 거래처는 1번만. */
     suspend fun brief(c: ClientEntity, force: Boolean = false): String {
-        if (!force && guestOnBoard) { signals.log("동승자 탑승 — ${c.name} 브리핑 보류(거래처 정보 보호)"); return "" }
+        if (!force && guestOnBoard) { if (heldThisTrip.add(c.id)) signals.log("동승자 탑승 — 브리핑 보류(거래처 정보 보호)"); return "" }
         if (!force && !briefedThisTrip.add(c.id)) return ""
         val notes = db.notes().forClient(c.id)
         val open = notes.filter { !it.tasksDone }.flatMap { it.tasks.lines() }.filter { it.isNotBlank() }
@@ -325,26 +369,63 @@ class AppGraph(private val context: Context) {
 
     // ── 주유·충전 포착 ─────────────────────────────────────────────
 
-    /** 주차 중 배터리·연료 상승 → 기록을 만들거나(첫 포착) 최신 값으로 고친다. 금액은 사용자가 넣는다. */
-    private fun onRefill(r: Refill, final: Boolean) = scope.launch {
-        lock.withLock {
-            val id = refillIds[r.kind]
-            if (id != null) {
-                db.refills().setTo(id, r.toPct)
-                if (final) refillIds.remove(r.kind) // 출발 — 이번 주차의 포착 끝
-                return@withLock
+    /** 앱이 다시 시작됐을 때 저장해 둔 주차 상태를 되돌린다 (실차는 주차 중 헤드유닛이 꺼진다). */
+    private fun restoreEnergy() {
+        energy.forEach { (kind, w) ->
+            val at = settings.getLong("energy_parked_at_${kind.name}", 0)
+            val low = settings.getInt("energy_low_${kind.name}", -1)
+            if (at > 0 && low >= 0 && System.currentTimeMillis() - at < ENERGY_RESTORE_MS) w.restore(EnergyWatcher.Snapshot(at, low))
+        }
+    }
+
+    private fun saveEnergy(kind: EnergyKind, w: EnergyWatcher) {
+        val snap = w.snapshot()
+        settings.edit().apply {
+            if (snap == null) { remove("energy_parked_at_${kind.name}"); remove("energy_low_${kind.name}"); remove("refill_id_${kind.name}") }
+            else { putLong("energy_parked_at_${kind.name}", snap.parkedAt); putInt("energy_low_${kind.name}", snap.low) }
+        }.apply()
+    }
+
+    private suspend fun handleEnergy(e: EnergyEvent) {
+        when (e) {
+            is EnergyEvent.GearChanged -> energy.forEach { (kind, w) ->
+                // 주차 중 오른 배터리·연료 → 출발할 때 최종 값으로 확정
+                w.onGear(e.gear, e.now, if (kind == EnergyKind.EV_CHARGE) e.soc else e.fuel)?.let { onRefill(it, final = true) }
+                saveEnergy(kind, w)
             }
-            val last = db.trips().latest()
-            val purpose = if (last?.purpose == Purpose.BUSINESS.name) Purpose.BUSINESS else Purpose.UNKNOWN
-            val here = signals.location.value
-            refillIds[r.kind] = db.refills().insert(
-                RefillEntity(kind = r.kind.name, startedAt = r.startedAt, fromPct = r.fromPct, toPct = r.toPct, lat = here?.lat, lon = here?.lon, place = last?.destinationName, purpose = purpose.name),
-            )
-            signals.log("${r.kind.label} 포착: ${r.fromPct}% → ${r.toPct}% (${purpose.name})")
-            if (final) refillIds.remove(r.kind)
-            else if (signals.cabin.value.driverSeated || !signals.cabin.value.known) {
-                voice.speak((if (r.kind == EnergyKind.EV_CHARGE) "충전이" else "주유가") + " 확인됐어요. 금액만 넣으면 유류비 정산에 들어가요.")
+            is EnergyEvent.Level -> {
+                val w = energy.getValue(e.kind)
+                w.onLevel(e.pct, e.now)?.let { onRefill(it, final = false) }
+                saveEnergy(e.kind, w)
             }
+        }
+    }
+
+    /**
+     * 주차 중 배터리·연료 상승 → 기록을 만들거나(첫 포착) 최신 값으로 고친다. 금액은 사용자가 넣는다.
+     * [handleEnergy] 에서만 불려 순서대로 처리된다. 기록 id 는 앱이 다시 시작돼도 이어지게 저장한다.
+     */
+    private suspend fun onRefill(r: Refill, final: Boolean) {
+        val key = "refill_id_${r.kind.name}"
+        val id = settings.getLong(key, -1)
+        if (id >= 0) {
+            db.refills().setTo(id, r.toPct)
+            if (final) settings.edit().remove(key).apply()
+            return
+        }
+        val last = db.trips().latest()
+        // 이번 주차의 운행(주차 직전에 끝난 것)일 때만 장소·업무 여부를 이어받는다
+        val sameStop = last != null && last.endAt >= r.startedAt - 60_000
+        val purpose = if (sameStop && last?.purpose == Purpose.BUSINESS.name) Purpose.BUSINESS else Purpose.UNKNOWN
+        val here = signals.location.value
+        val newId = db.refills().insert(
+            RefillEntity(kind = r.kind.name, startedAt = r.startedAt, fromPct = r.fromPct, toPct = r.toPct, lat = here?.lat, lon = here?.lon, place = if (sameStop) last?.destinationName else null, purpose = purpose.name),
+        )
+        if (!final) settings.edit().putLong(key, newId).apply()
+        signals.log("${r.kind.label} 포착: ${r.fromPct}% → ${r.toPct}% (${purpose.name})")
+        if (!final && (signals.cabin.value.driverSeated || !signals.cabin.value.known)) {
+            val what = if (r.kind == EnergyKind.EV_CHARGE) "충전" else "주유"
+            voice.speak(if (claimMode == ClaimMode.ACTUAL) "$what 기록을 남겼어요. 업무용이면 금액을 넣어 주세요." else "$what 기록을 남겼어요.")
         }
     }
 
@@ -359,15 +440,22 @@ class AppGraph(private val context: Context) {
         return from to from + DAY_MS
     }
 
+    /** 이번 달 1일 0시 */
+    fun monthStart(now: Long = System.currentTimeMillis()): Long = java.util.Calendar.getInstance().apply {
+        timeInMillis = today(now).first; set(java.util.Calendar.DAY_OF_MONTH, 1)
+    }.timeInMillis
+
     suspend fun dayCloseInput(): DayCloseInput {
         val (from, to) = today()
         val trips = db.trips().between(from, to)
         val notes = db.notes().all().filter { !it.tasksDone }
+        // 미분류·금액 미입력은 오늘 것만이 아니라 이번 달에 남은 것 전부 (어제 미룬 것도 다시 보이게)
+        val monthTrips = db.trips().between(monthStart(), to)
         return DayCloseInput(
             trips = trips.size,
             businessKm = trips.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.distanceKm },
-            unknownTrips = trips.count { it.purpose == Purpose.UNKNOWN.name },
-            refillsWithoutAmount = db.refills().between(from, to).count { it.amount == null },
+            unknownTrips = monthTrips.count { it.purpose == Purpose.UNKNOWN.name },
+            refillsWithoutAmount = if (claimMode == ClaimMode.ACTUAL) db.refills().between(monthStart(), to).count { it.amount == null && it.purpose != Purpose.PERSONAL.name } else 0,
             openTasks = notes.flatMap { it.tasks.lines() }.filter { it.isNotBlank() },
             tomorrowClients = notes.filter { (it.followUpAt ?: 0) in to until to + DAY_MS }.mapNotNull { it.clientName }.distinct(),
         )
@@ -377,7 +465,7 @@ class AppGraph(private val context: Context) {
     private suspend fun maybeOfferDayClose(endAt: Long) {
         val hour = java.util.Calendar.getInstance().apply { timeInMillis = endAt }.get(java.util.Calendar.HOUR_OF_DAY)
         val key = today(endAt).first
-        if (hour < dayEndHour || settings.getLong("day_close_offered", 0) == key) return
+        if (hour < dayEndHour || settings.getLong("day_close_offered", 0) == key || settings.getLong("day_closed", 0) == key) return
         settings.edit().putLong("day_close_offered", key).apply()
         openDayClose()
     }
@@ -416,6 +504,8 @@ class AppGraph(private val context: Context) {
         /** 이만큼 차를 떠나 있었으면 미팅을 한 것으로 본다 (짐 꺼내기 등 잠깐 내림은 제외) */
         const val MIN_MEETING_MS = 3 * 60 * 1000L
         const val DAY_MS = 24 * 60 * 60 * 1000L
+        /** 이보다 오래된 주차 상태는 되돌리지 않는다 */
+        const val ENERGY_RESTORE_MS = 24 * 60 * 60 * 1000L
     }
 }
 

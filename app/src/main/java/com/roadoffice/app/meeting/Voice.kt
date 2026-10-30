@@ -71,6 +71,12 @@ class Voice(context: Context, private val log: (String) -> Unit) {
         runCatching { tts.speak(text, true) }.onFailure { log("TTS 실패: ${it.message}"); then?.invoke() }
     }
 
+    /** 읽던 말 멈추기 (동승자가 탔을 때 업무 내용이 이어서 나오지 않게). */
+    fun stop() {
+        onDone = null
+        runCatching { tts.stop() }
+    }
+
     /** 한 번 듣기 — 최종 인식 결과 또는 실패를 콜백. */
     fun listen(onResult: (String) -> Unit, onError: (String) -> Unit) {
         if (!sttReady) { onError("STT 준비 안 됨"); return }

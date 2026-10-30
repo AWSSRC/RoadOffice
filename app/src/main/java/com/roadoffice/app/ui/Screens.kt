@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -90,10 +91,10 @@ private fun DrivingView(graph: AppGraph) {
         Text("워크마일 · 운행 기록 중", color = Active, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Text("%.1f km".format(km), color = Color.White, fontSize = 96.sp, fontWeight = FontWeight.Bold)
-        trip?.destinationName?.let { Text("→ $it", color = Color.White, fontSize = 36.sp) }
+        val guest = rememberGuest(graph)
+        trip?.destinationName?.let { Text(if (guest) "→ 업무 방문지" else "→ $it", color = Color.White, fontSize = 36.sp) }
         val listening by graph.listening.collectAsState()
         val debrief by graph.pendingDebrief.collectAsState()
-        val guest = rememberGuest(graph)
         if (listening) Text("🎙 듣고 있어요… ${if (guest) "" else debrief?.clientName ?: ""} 미팅 이야기를 말씀해 주세요", color = Active, fontSize = 30.sp)
         if (guest) {
             Spacer(Modifier.height(16.dp))
@@ -109,7 +110,10 @@ private enum class Tab(val label: String) { TODAY("오늘 운행"), NOTES("상�
 @Composable
 private fun ParkedView(graph: AppGraph) {
     var tab by remember { mutableStateOf(Tab.TODAY) }
+    val closing by graph.dayClose.collectAsState()
     Column(Modifier.fillMaxSize().padding(32.dp)) {
+        // 하루 마감 중에는 탭을 숨긴다 (눌러도 반응 없는 탭이 남지 않게)
+        if (closing) { DayClosePanel(graph); return@Column }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("로드오피스", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(32.dp))
@@ -132,10 +136,10 @@ private fun ParkedView(graph: AppGraph) {
             PrivacyChip(graph)
         }
         Spacer(Modifier.height(16.dp))
-        val closing by graph.dayClose.collectAsState()
-        if (closing) { DayClosePanel(graph); return@Column }
+        // 배너는 한 번에 하나 — 회고가 먼저, 주유·충전은 한 줄로 접는다
+        val debrief by graph.pendingDebrief.collectAsState()
         DebriefBanner(graph)
-        RefillBanner(graph)
+        RefillBanner(graph, collapsed = debrief != null)
         Spacer(Modifier.height(8.dp))
         when (tab) {
             Tab.TODAY -> TodayTab(graph)
@@ -168,27 +172,31 @@ private fun TodayTab(graph: AppGraph) {
     val (from, to) = remember { dayRange() }
     val trips by graph.db.trips().observeBetween(from, to).collectAsState(initial = emptyList())
     val business = trips.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.distanceKm }
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    val guest = rememberGuest(graph)
+    // 퇴근 시각 전에는 마감 버튼을 눈에 덜 띄게
+    val evening = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) >= graph.dayEndHour
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Stat("오늘 운행", "${trips.size}건")
         Stat("업무 거리", "%.1f km".format(business))
         Stat("미분류", "${trips.count { it.purpose == Purpose.UNKNOWN.name }}건", if (trips.any { it.purpose == Purpose.UNKNOWN.name }) Warn else Color.White)
-        Button(
+        if (evening) Button(
             onClick = { graph.openDayClose() },
             colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue),
             modifier = Modifier.height(96.dp),
         ) { Text("오늘 마감 30초", fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+        else OutlinedButton(onClick = { graph.openDayClose() }, modifier = Modifier.height(72.dp)) { Text("오늘 마감", fontSize = 24.sp, color = Color.White) }
     }
     Spacer(Modifier.height(20.dp))
     if (trips.isEmpty()) {
         Text("아직 오늘 기록된 운행이 없어요. 출발하면 자동으로 기록됩니다.", color = Sub, fontSize = 24.sp)
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(trips, key = { it.id }) { t -> TripRow(t) { p -> graph.setPurpose(t.id, p) } }
+        items(trips, key = { it.id }) { t -> TripRow(t, guest) { p -> graph.setPurpose(t.id, p) } }
     }
 }
 
 @Composable
-internal fun TripRow(t: TripEntity, onPurpose: (Purpose) -> Unit) {
+internal fun TripRow(t: TripEntity, guest: Boolean = false, onPurpose: (Purpose) -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -196,7 +204,7 @@ internal fun TripRow(t: TripEntity, onPurpose: (Purpose) -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("${hm.format(Date(t.startAt))} – ${hm.format(Date(t.endAt))}  ·  %.1f km".format(t.distanceKm), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Text(
-                listOfNotNull(t.destinationName ?: "목적지 미상", t.tollFareEstimate?.takeIf { it > 0 }?.let { "통행료 약 ${won(it.toLong())}" }).joinToString("  ·  "),
+                listOfNotNull(if (guest && t.destinationName != null) "업무 방문 (동승자 탑승 중 가림)" else t.destinationName ?: "목적지 미상", t.tollFareEstimate?.takeIf { it > 0 }?.let { "통행료 약 ${won(it.toLong())}" }).joinToString("  ·  "),
                 color = Sub, fontSize = 22.sp,
             )
         }
@@ -211,7 +219,7 @@ internal fun TripRow(t: TripEntity, onPurpose: (Purpose) -> Unit) {
                     .clip(RoundedCornerShape(16.dp))
                     .background(if (on) (if (p == Purpose.UNKNOWN) Warn else Active) else HyundaiBlue)
                     .clickable { onPurpose(p) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 18.dp, vertical = 16.dp),
             )
         }
     }
@@ -300,10 +308,19 @@ private fun DebriefBanner(graph: AppGraph) {
         val guest = rememberGuest(graph)
         Text(if (guest) "방금 미팅 어땠어요?" else "${p.clientName} 미팅 어땠어요?", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(16.dp))
-        OutlinedTextField(value = text, onValueChange = { text = it.take(2000) }, singleLine = true, placeholder = { Text("말하거나 입력 — 예: 견적 마음에 들어함, 다음 주 화요일 연락") }, modifier = Modifier.weight(1f))
+        OutlinedTextField(
+            value = text, onValueChange = { text = it.take(2000) }, singleLine = true,
+            placeholder = { Text(if (guest) "입력해 두거나, 혼자 탔을 때 말로 남겨요" else "예: 견적 마음에 들어함, 다음 주 화요일 연락") },
+            modifier = Modifier.weight(1f),
+        )
         Spacer(Modifier.width(12.dp))
-        Button(onClick = { graph.addNote(text) }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue)) { Text("저장", fontSize = 22.sp) }
-        Text("나중에", color = Color.White, fontSize = 22.sp, modifier = Modifier.clickable { graph.dismissDebrief() }.padding(12.dp))
+        if (!guest) {
+            Button(onClick = { graph.listenDebrief() }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue), modifier = Modifier.height(64.dp)) { Text("🎙 말하기", fontSize = 22.sp) }
+            Spacer(Modifier.width(8.dp))
+        }
+        Button(onClick = { graph.addNote(text) }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue), modifier = Modifier.height(64.dp)) { Text("저장", fontSize = 22.sp) }
+        Spacer(Modifier.width(8.dp))
+        OutlinedButton(onClick = { graph.dismissDebrief() }, modifier = Modifier.height(64.dp)) { Text("나중에", fontSize = 22.sp, color = Color.White) }
     }
 }
 
@@ -377,6 +394,7 @@ private fun ClientRow(c: ClientEntity, onDelete: () -> Unit) {
 
 @Composable
 private fun SignalsTab(graph: AppGraph) {
+    if (!PrivacyGate(graph, "신호·기록 로그")) return // 로그에 거래처 이름이 남는다
     val odo by graph.signals.odometerKm.collectAsState()
     val gear by graph.signals.gear.collectAsState()
     val speed by graph.signals.speedKmh.collectAsState()

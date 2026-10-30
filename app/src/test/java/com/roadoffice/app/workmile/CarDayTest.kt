@@ -44,6 +44,22 @@ class EnergyWatcherTest {
     }
 }
 
+class EnergyRestoreTest {
+    @Test
+    fun `앱이 꺼졌다 켜져도 저장한 주차 상태로 충전을 포착한다 - 실차는 충전 중 헤드유닛이 꺼짐`() {
+        val before = EnergyWatcher(EnergyKind.EV_CHARGE)
+        before.onGear(Gear.PARK, 1_000, 40)
+        val snap = before.snapshot()!!
+        val after = EnergyWatcher(EnergyKind.EV_CHARGE) // 앱 재시작
+        after.restore(snap)
+        after.onGear(Gear.PARK, 9_000_000, 85) // 다시 켜졌을 때 이미 85%
+        val r = after.onLevel(85, 9_000_001)!!
+        assertEquals(40, r.fromPct)
+        assertEquals(1_000L, r.startedAt)
+        assertNull(EnergyWatcher(EnergyKind.EV_CHARGE).snapshot())
+    }
+}
+
 class DayCloseTest {
     private val base = DayCloseInput(trips = 4, businessKm = 38.25, unknownTrips = 1, refillsWithoutAmount = 1, openTasks = listOf("단가표 보내기", "원장님 연락"), tomorrowClients = listOf("한빛병원"))
 

@@ -80,7 +80,7 @@ class ReportWriter(private val context: Context) {
             c.drawText(day.format(Date(t.startAt)), cols[0], y, body)
             c.drawText((t.destination ?: "-").take(24), cols[1], y, body)
             c.drawText("%.1f".format(t.distanceKm), cols[2], y, body)
-            c.drawText(won.format((t.distanceKm * p.perKmRate).toLong()), cols[3], y, body)
+            c.drawText(if (p.mode == ClaimMode.KM_RATE) won.format((t.distanceKm * p.perKmRate).toLong()) else "-", cols[3], y, body) // 실비 방식은 아래 주유·충전 표가 유류비
             c.drawText(won.format(t.tollFare ?: 0), cols[4], y, body)
             y += 16
         }
