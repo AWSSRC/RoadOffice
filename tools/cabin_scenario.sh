@@ -12,6 +12,9 @@ post() { curl -s -X POST "$V/$1" -o /dev/null; }
 seat() { post "seat?kind=occupied&area=$1&value=$2"; }
 soc() { post "ev-battery?field=soc&value=$1"; }
 say() { echo "[$(date +%H:%M:%S)] $1"; }
+SHOT=${SHOT:-../assets/screens}
+cap() { $ADB exec-out screencap -p > "$SHOT/$1.png"; echo "   화면: $SHOT/$1.png"; }
+tap() { tools/ui.sh tap "$1" >/dev/null; }
 
 seat passenger false; seat rear_left false; seat rear_right false
 seat driver true; soc 55; put "gear?gear=Park"
@@ -44,13 +47,11 @@ sleep 6
 say "3. 미팅 끝, 다시 탐 → 회고 질문(출발 전)"
 seat driver true
 if [ "$RESTART" = 1 ]; then sleep 2; $ADB shell am start -n com.roadoffice.app/.MainActivity >/dev/null; sleep 4; fi
-sleep 10
+sleep 6; cap 09_debrief_seated
+sleep 4
 
 say "4. 동승자 탑승 → 보호"
 seat passenger true; sleep 4
-SHOT=${SHOT:-../assets/screens}
-cap() { $ADB exec-out screencap -p > "$SHOT/$1.png"; echo "   화면: $SHOT/$1.png"; }
-tap() { tools/ui.sh tap "$1" >/dev/null; }
 tap "워크마일"; sleep 2; tap "실비"; sleep 1   # 실비 정산이면 충전 배너에서 금액을 묻는다
 tap "오늘 운행"; sleep 2; cap 10_refill_debrief_guest
 tap "상담 일지"; sleep 2; cap 11_privacy_notes

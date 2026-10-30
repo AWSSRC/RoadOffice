@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -344,8 +345,11 @@ private fun NotesTab(graph: AppGraph) {
         Stat("후속 일정", "${notes.count { it.followUpAt != null && !it.tasksDone }}건")
     }
     Spacer(Modifier.height(16.dp))
-    if (notes.isEmpty()) Text("거래처 방문 후 출발하면 \"미팅 어땠어요?\" 하고 물어요. 말한 내용이 여기에 정리됩니다.", color = Sub, fontSize = 24.sp)
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    if (notes.isEmpty()) Text("거래처 방문 후 차에 다시 타면 \"미팅 어땠어요?\" 하고 물어요. 말한 내용이 여기에 정리됩니다.", color = Sub, fontSize = 24.sp)
+    // 새 일지가 맨 위에 들어오면 목록도 맨 위로 (방금 말한 내용이 바로 보이게)
+    val listState = rememberLazyListState()
+    LaunchedEffect(notes.firstOrNull()?.id) { if (notes.isNotEmpty()) listState.scrollToItem(0) }
+    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items(notes, key = { it.id }) { n -> NoteRow(n) { graph.setTasksDone(n.id, !n.tasksDone) } }
     }
 }

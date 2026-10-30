@@ -20,8 +20,7 @@ class NoteAssistantTest {
     fun `회고에서 요약 할 일 후속 일정을 뽑는다`() = runBlocking {
         val s = a.structure("견적서 마음에 들어 하셨어요 배우자랑 상의하고 다음 주 화요일에 연락 주신대요 그리고 카탈로그 보내 드리기로 했어요", "김고객", now)
         assertEquals("견적서 마음에 들어 하셨어요", s.summary)
-        assertEquals(2, s.tasks.size)
-        assertTrue(s.tasks.any { it.contains("연락") })
+        assertEquals(1, s.tasks.size) // "연락 주신대요"는 고객이 할 일 → 후속 일정으로만
         assertTrue(s.tasks.any { it.startsWith("카탈로그") }) // 앞의 '그리고' 제거
         assertEquals(day(2026, Calendar.NOVEMBER, 3), s.followUpAt)
         assertEquals("rule", s.source)
@@ -68,5 +67,12 @@ class LlmParseTest {
     fun `주행 화면 브리핑은 한 줄 - 거래처와 첫 할 일만`() {
         org.junit.Assert.assertEquals("한빛병원 · 할 일 2: 수정 견적서 보내기", Briefing.short("한빛병원", listOf("수정 견적서 보내기", "샘플 전달")))
         org.junit.Assert.assertEquals("한빛병원 · 남은 할 일 없음", Briefing.short("한빛병원", emptyList()))
+    }
+
+    @Test
+    fun `상대가 할 일은 내 할 일로 넣지 않고 후속 일정만 잡는다`() = kotlinx.coroutines.runBlocking {
+        val r = RuleNoteAssistant().structure("원장님이 샘플 반응이 좋대요 다음 주 화요일에 다시 연락 주신대요 그리고 금요일까지 단가표 보내 드리기로 했어요", "한빛병원")
+        org.junit.Assert.assertEquals(listOf("금요일까지 단가표 보내 드리기로 했어요"), r.tasks)
+        org.junit.Assert.assertNotNull(r.followUpAt)
     }
 }
