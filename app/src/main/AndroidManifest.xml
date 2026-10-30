@@ -3,9 +3,11 @@
 
     <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
 
-    <!-- Pleos Vehicle SDK: 주행거리·기어(CAR_DRIVE), 연비·배터리(CAR_ENERGY) -->
+    <!-- Pleos Vehicle SDK: 주행거리·기어(CAR_DRIVE), 배터리 SOC·연료(CAR_ENERGY, 주유·충전 포착) -->
     <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
     <uses-permission android:name="pleos.car.permission.CAR_ENERGY" />
+    <!-- Pleos Vehicle SDK: 좌석 점유 (동승자 보호·미팅 후 착석 시 회고) — 조회만, 좌석 제어 권한은 쓰지 않음 -->
+    <uses-permission android:name="pleos.car.permission.CAR_SEATS" />
     <!-- Pleos NaviHelper: 경로·도착·트립 정보 조회 -->
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />

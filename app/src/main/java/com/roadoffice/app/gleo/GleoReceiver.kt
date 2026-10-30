@@ -51,6 +51,11 @@ class GleoReceiver : BroadcastReceiver() {
                     }
                     GET_CLIENT_BRIEFING -> {
                         val name = params.optString("clientName").take(80)
+                        // 동승자 보호: 고객이 타 있을 수 있어 거래처 정보를 소리 내 읽지 않는다
+                        if (graph.guestOnBoard) {
+                            respond(context, action, "fail", "A passenger is on board, so the client briefing was held to protect client information. Ask again when the driver is alone.")
+                            return@launch
+                        }
                         val text = if (name.isBlank()) null else graph.briefByName(name)
                         if (text == null) respond(context, action, "fail", "No registered client matches that name.")
                         else respond(

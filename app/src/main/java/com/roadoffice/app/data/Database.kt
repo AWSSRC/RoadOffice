@@ -62,6 +62,45 @@ data class MeetingNoteEntity(
     val tasksDone: Boolean = false,
 )
 
+/** 주유·충전 기록 — 주차 중 배터리·연료가 오른 것을 차량 신호로 포착. 금액은 사용자가 넣는다. */
+@Entity(tableName = "refills")
+data class RefillEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** EV_CHARGE / FUEL */
+    val kind: String,
+    val startedAt: Long,
+    val fromPct: Int,
+    val toPct: Int,
+    val lat: Double?,
+    val lon: Double?,
+    /** 직전 운행의 목적지(방문처) — 어디서 주유·충전했는지 */
+    val place: String?,
+    val amount: Long? = null,
+    /** BUSINESS / PERSONAL / UNKNOWN — 직전 운행이 업무면 업무로 시작 */
+    val purpose: String,
+)
+
+@Dao
+interface RefillDao {
+    @Insert
+    suspend fun insert(r: RefillEntity): Long
+
+    @Query("UPDATE refills SET toPct = :toPct WHERE id = :id")
+    suspend fun setTo(id: Long, toPct: Int)
+
+    @Query("UPDATE refills SET amount = :amount WHERE id = :id")
+    suspend fun setAmount(id: Long, amount: Long?)
+
+    @Query("UPDATE refills SET purpose = :purpose WHERE id = :id")
+    suspend fun setPurpose(id: Long, purpose: String)
+
+    @Query("SELECT * FROM refills WHERE startedAt >= :from AND startedAt < :to ORDER BY startedAt DESC")
+    fun observeBetween(from: Long, to: Long): Flow<List<RefillEntity>>
+
+    @Query("SELECT * FROM refills WHERE startedAt >= :from AND startedAt < :to ORDER BY startedAt")
+    suspend fun between(from: Long, to: Long): List<RefillEntity>
+}
+
 @Dao
 interface MeetingNoteDao {
     @Insert
@@ -72,6 +111,9 @@ interface MeetingNoteDao {
 
     @Query("SELECT * FROM meeting_notes WHERE clientId = :clientId ORDER BY createdAt DESC")
     suspend fun forClient(clientId: Long): List<MeetingNoteEntity>
+
+    @Query("SELECT * FROM meeting_notes ORDER BY createdAt DESC")
+    suspend fun all(): List<MeetingNoteEntity>
 
     @Query("SELECT COUNT(*) FROM meeting_notes WHERE tripId = :tripId")
     suspend fun countForTrip(tripId: Long): Int
@@ -125,11 +167,12 @@ interface ClientDao {
     suspend fun delete(id: Long)
 }
 
-@Database(entities = [TripEntity::class, ClientEntity::class, MeetingNoteEntity::class], version = 2, exportSchema = false)
+@Database(entities = [TripEntity::class, ClientEntity::class, MeetingNoteEntity::class, RefillEntity::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun trips(): TripDao
     abstract fun clients(): ClientDao
     abstract fun notes(): MeetingNoteDao
+    abstract fun refills(): RefillDao
 
     companion object {
         /** SQLCipher 로 DB 파일 전체를 암호화. 암호키는 [DbKeyStore] 가 Keystore 로 감싸 보관한다. */

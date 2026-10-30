@@ -44,6 +44,7 @@ import com.roadoffice.app.AppGraph
 import com.roadoffice.app.data.ClientEntity
 import com.roadoffice.app.data.MeetingNoteEntity
 import com.roadoffice.app.data.TripEntity
+import com.roadoffice.app.workmile.ClaimMode
 import com.roadoffice.app.workmile.Gear
 import com.roadoffice.app.workmile.LatLng
 import com.roadoffice.app.workmile.Purpose
@@ -55,11 +56,11 @@ import java.util.Date
 import java.util.Locale
 
 // 현대 브랜드 색
-private val HyundaiBlue = Color(0xFF002C5F)
-private val Card = Color(0xFF0A3D7A)
-private val Active = Color(0xFF00AAD2)
-private val Sub = Color(0xFFA9BCD6)
-private val Warn = Color(0xFFF2A900)
+internal val HyundaiBlue = Color(0xFF002C5F)
+internal val Card = Color(0xFF0A3D7A)
+internal val Active = Color(0xFF00AAD2)
+internal val Sub = Color(0xFFA9BCD6)
+internal val Warn = Color(0xFFF2A900)
 
 /** 주행 중이면 한 줄 화면, 정차 중이면 탭 화면 (운전자 주의 분산 최소화). */
 @Composable
@@ -92,7 +93,12 @@ private fun DrivingView(graph: AppGraph) {
         trip?.destinationName?.let { Text("→ $it", color = Color.White, fontSize = 36.sp) }
         val listening by graph.listening.collectAsState()
         val debrief by graph.pendingDebrief.collectAsState()
-        if (listening) Text("🎙 듣고 있어요… ${debrief?.clientName ?: ""} 미팅 이야기를 말씀해 주세요", color = Active, fontSize = 30.sp)
+        val guest = rememberGuest(graph)
+        if (listening) Text("🎙 듣고 있어요… ${if (guest) "" else debrief?.clientName ?: ""} 미팅 이야기를 말씀해 주세요", color = Active, fontSize = 30.sp)
+        if (guest) {
+            Spacer(Modifier.height(16.dp))
+            Text("동승자 탑승 중 · 거래처·상담 내용은 소리 내 읽지 않아요", color = Warn, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+        }
         Spacer(Modifier.height(24.dp))
         Text("주행 중에는 조작할 수 없어요. 정차하면 운행 목록이 열립니다.", color = Sub, fontSize = 24.sp)
     }
@@ -122,9 +128,14 @@ private fun ParkedView(graph: AppGraph) {
                         .padding(horizontal = 22.dp, vertical = 12.dp),
                 )
             }
+            Spacer(Modifier.weight(1f))
+            PrivacyChip(graph)
         }
         Spacer(Modifier.height(16.dp))
+        val closing by graph.dayClose.collectAsState()
+        if (closing) { DayClosePanel(graph); return@Column }
         DebriefBanner(graph)
+        RefillBanner(graph)
         Spacer(Modifier.height(8.dp))
         when (tab) {
             Tab.TODAY -> TodayTab(graph)
@@ -136,14 +147,14 @@ private fun ParkedView(graph: AppGraph) {
     }
 }
 
-private fun dayRange(): Pair<Long, Long> {
+internal fun dayRange(): Pair<Long, Long> {
     val c = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
     val from = c.timeInMillis
     c.add(Calendar.DAY_OF_MONTH, 1)
     return from to c.timeInMillis
 }
 
-private fun monthRange(): Pair<Long, Long> {
+internal fun monthRange(): Pair<Long, Long> {
     val c = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
     val from = c.timeInMillis
     c.add(Calendar.MONTH, 1)
@@ -161,6 +172,11 @@ private fun TodayTab(graph: AppGraph) {
         Stat("오늘 운행", "${trips.size}건")
         Stat("업무 거리", "%.1f km".format(business))
         Stat("미분류", "${trips.count { it.purpose == Purpose.UNKNOWN.name }}건", if (trips.any { it.purpose == Purpose.UNKNOWN.name }) Warn else Color.White)
+        Button(
+            onClick = { graph.openDayClose() },
+            colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue),
+            modifier = Modifier.height(96.dp),
+        ) { Text("오늘 마감 30초", fontSize = 26.sp, fontWeight = FontWeight.Bold) }
     }
     Spacer(Modifier.height(20.dp))
     if (trips.isEmpty()) {
@@ -172,7 +188,7 @@ private fun TodayTab(graph: AppGraph) {
 }
 
 @Composable
-private fun TripRow(t: TripEntity, onPurpose: (Purpose) -> Unit) {
+internal fun TripRow(t: TripEntity, onPurpose: (Purpose) -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -205,11 +221,15 @@ private fun TripRow(t: TripEntity, onPurpose: (Purpose) -> Unit) {
 private fun WorkMileTab(graph: AppGraph) {
     val (from, to) = remember { monthRange() }
     val trips by graph.db.trips().observeBetween(from, to).collectAsState(initial = emptyList())
+    val refills by graph.db.refills().observeBetween(from, to).collectAsState(initial = emptyList())
     var rate by remember { mutableStateOf(graph.perKmRate.toString()) }
+    var mode by remember { mutableStateOf(graph.claimMode) }
     val s = WorkMileSummary.of(
         trips.map { it.distanceKm to Purpose.valueOf(it.purpose) },
         trips.filter { it.purpose == Purpose.BUSINESS.name }.mapNotNull { it.tollFareEstimate },
         rate.toIntOrNull() ?: 0,
+        mode,
+        refills.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.amount ?: 0L },
     )
     Text("이번 달 워크마일", color = Active, fontSize = 28.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(12.dp))
@@ -221,9 +241,15 @@ private fun WorkMileTab(graph: AppGraph) {
     }
     Spacer(Modifier.height(20.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("회사 km 단가(원)", color = Color.White, fontSize = 24.sp)
+        Text("유류비 정산 방식", color = Color.White, fontSize = 24.sp)
         Spacer(Modifier.width(16.dp))
-        OutlinedTextField(
+        ClaimMode.entries.forEach { m ->
+            Chip(m.label, m == mode) { mode = m; graph.claimMode = m }
+        }
+        Spacer(Modifier.width(32.dp))
+        if (mode == ClaimMode.KM_RATE) Text("회사 km 단가(원)", color = Color.White, fontSize = 24.sp)
+        Spacer(Modifier.width(16.dp))
+        if (mode == ClaimMode.KM_RATE) OutlinedTextField(
             value = rate,
             onValueChange = { v -> rate = v.filter { it.isDigit() }.take(5); rate.toIntOrNull()?.let { graph.perKmRate = it } },
             singleLine = true,
@@ -231,7 +257,16 @@ private fun WorkMileTab(graph: AppGraph) {
         )
     }
     Spacer(Modifier.height(12.dp))
-    Text("청구액 = 업무 km × 단가 + 업무 운행 예상 통행료. 거리는 차량 주행거리계 기준입니다.", color = Sub, fontSize = 22.sp)
+    Text(
+        if (mode == ClaimMode.KM_RATE) "청구액 = 업무 km × 단가 + 업무 운행 예상 통행료. 거리는 차량 주행거리계 기준 · 주유·충전 기록은 참고로만 붙어요(이중 청구 방지)."
+        else "청구액 = 업무 주유·충전 실비 + 업무 운행 예상 통행료. 주유·충전은 차량 배터리·연료 상승으로 자동 포착돼요.",
+        color = Sub, fontSize = 22.sp,
+    )
+    if (refills.isNotEmpty()) {
+        Spacer(Modifier.height(12.dp))
+        Text("이번 달 주유·충전 ${refills.size}건", color = Active, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        refills.take(3).forEach { r -> RefillRow(graph, r) }
+    }
     Spacer(Modifier.height(20.dp))
     var name by remember { mutableStateOf(graph.userName) }
     var dept by remember { mutableStateOf(graph.department) }
@@ -262,7 +297,8 @@ private fun DebriefBanner(graph: AppGraph) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF00597A)).padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("${p.clientName} 미팅 어땠어요?", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        val guest = rememberGuest(graph)
+        Text(if (guest) "방금 미팅 어땠어요?" else "${p.clientName} 미팅 어땠어요?", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(16.dp))
         OutlinedTextField(value = text, onValueChange = { text = it.take(2000) }, singleLine = true, placeholder = { Text("말하거나 입력 — 예: 견적 마음에 들어함, 다음 주 화요일 연락") }, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(12.dp))
@@ -276,6 +312,7 @@ private val dayOnly = SimpleDateFormat("M/d(E)", Locale.KOREA)
 
 @Composable
 private fun NotesTab(graph: AppGraph) {
+    if (!PrivacyGate(graph, "상담 일지")) return
     val notes by graph.db.notes().observeAll().collectAsState(initial = emptyList())
     val openTasks = notes.filter { !it.tasksDone }.sumOf { n -> n.tasks.lines().count { it.isNotBlank() } }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -308,6 +345,7 @@ private fun NoteRow(n: MeetingNoteEntity, onToggle: () -> Unit) {
 
 @Composable
 private fun ClientsTab(graph: AppGraph) {
+    if (!PrivacyGate(graph, "거래처 목록")) return
     val clients by graph.db.clients().observeAll().collectAsState(initial = emptyList())
     val here by graph.signals.location.collectAsState()
     var name by remember { mutableStateOf("") }
@@ -361,17 +399,17 @@ private fun SignalsTab(graph: AppGraph) {
 }
 
 @Composable
-private fun Stat(label: String, value: String, valueColor: Color = Color.White) {
+internal fun Stat(label: String, value: String, valueColor: Color = Color.White) {
     Column(Modifier.width(280.dp).clip(RoundedCornerShape(14.dp)).background(Card).padding(20.dp)) {
         Text(label, color = Sub, fontSize = 20.sp)
         Text(value, color = valueColor, fontSize = 34.sp, fontWeight = FontWeight.Bold)
     }
 }
 
-private fun Purpose.label() = when (this) {
+internal fun Purpose.label() = when (this) {
     Purpose.BUSINESS -> "업무"
     Purpose.PERSONAL -> "개인"
     Purpose.UNKNOWN -> "미분류"
 }
 
-private fun won(v: Long) = NumberFormat.getInstance(Locale.KOREA).format(v) + "원"
+internal fun won(v: Long) = NumberFormat.getInstance(Locale.KOREA).format(v) + "원"

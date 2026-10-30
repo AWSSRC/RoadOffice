@@ -13,6 +13,7 @@ class MainActivity : ComponentActivity() {
     private val permissions = arrayOf(
         "pleos.car.permission.CAR_DRIVE",
         "pleos.car.permission.CAR_ENERGY",
+        "pleos.car.permission.CAR_SEATS",
         "pleos.car.permission.NAVI_ROUTE",
         "pleos.car.permission.NAVI_ROUTE_SEARCH",
         "pleos.car.permission.FUSED_LOCATION",

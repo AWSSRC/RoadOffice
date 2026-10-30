@@ -5,9 +5,11 @@ import android.content.Context
 import com.roadoffice.app.data.AppDatabase
 import com.roadoffice.app.data.ClientEntity
 import com.roadoffice.app.data.MeetingNoteEntity
+import com.roadoffice.app.data.RefillEntity
 import com.roadoffice.app.data.SecurePrefs
 import com.roadoffice.app.data.TripEntity
 import com.roadoffice.app.meeting.Briefing
+import com.roadoffice.app.meeting.DebriefTrigger
 import com.roadoffice.app.meeting.NoteAssistant
 import com.roadoffice.app.meeting.LlmNoteAssistant
 import com.roadoffice.app.meeting.Voice
@@ -15,12 +17,19 @@ import com.roadoffice.app.vehicle.NaviEvent
 import com.roadoffice.app.vehicle.VehicleSignals
 import com.roadoffice.app.workmile.ActiveTrip
 import com.roadoffice.app.workmile.Classifier
+import com.roadoffice.app.workmile.ClaimMode
 import com.roadoffice.app.workmile.ClientPlace
+import com.roadoffice.app.workmile.DayClose
+import com.roadoffice.app.workmile.DayCloseInput
+import com.roadoffice.app.workmile.EnergyKind
+import com.roadoffice.app.workmile.EnergyWatcher
+import com.roadoffice.app.workmile.ExportRefill
 import com.roadoffice.app.workmile.ExportProfile
 import com.roadoffice.app.workmile.ExportTrip
 import com.roadoffice.app.workmile.Gear
 import com.roadoffice.app.workmile.LatLng
 import com.roadoffice.app.workmile.Purpose
+import com.roadoffice.app.workmile.Refill
 import com.roadoffice.app.workmile.ReportWriter
 import com.roadoffice.app.workmile.TripDraft
 import com.roadoffice.app.workmile.TripRecorder
@@ -47,7 +56,7 @@ class RoadOfficeApp : Application() {
 
 val Context.graph: AppGraph get() = (applicationContext as RoadOfficeApp).graph
 
-/** 회고 대기 상태 — 거래처에서 출발하면 "미팅 어땠어요?" 를 묻는다. */
+/** 회고 대기 상태 — 미팅을 마치고 차에 다시 타면 "미팅 어땠어요?" 를 묻는다. */
 data class PendingDebrief(val tripId: Long, val clientId: Long?, val clientName: String)
 
 /**
@@ -55,7 +64,10 @@ data class PendingDebrief(val tripId: Long, val clientId: Long?, val clientName:
  *
  * 영업사원의 하루 흐름:
  *  출발 → (워크마일) 운행 기록 → 거래처 1km 앞 (브리핑) 지난 상담·할 일 음성 → 도착·주차 → 운행 저장·업무 분류
- *  → 미팅 → 다시 출발 (회고) "○○ 미팅 어땠어요?" → 말한 내용을 상담 일지·할 일로 정리
+ *  → 미팅 → 차에 다시 탐(P단·운전석 착석) (회고) "○○ 미팅 어땠어요?" → 말한 내용을 상담 일지·할 일로 정리
+ *  → 주차 중 충전·주유 (자동 포착) 금액만 넣으면 정산에 반영 → 마지막 주차 (하루 마감) 남은 정리를 30초에
+ *
+ * 동승자 보호: 운전석 말고 다른 자리에 사람이 있으면 거래처·상담 내용을 소리 내 읽지 않는다.
  */
 class AppGraph(private val context: Context) {
     val db: AppDatabase by lazy { AppDatabase.open(context) }
@@ -76,10 +88,30 @@ class AppGraph(private val context: Context) {
     private val _listening = MutableStateFlow(false)
     val listening: StateFlow<Boolean> = _listening
     private val briefedThisTrip = mutableSetOf<Long>()
+    private val debriefTrigger = DebriefTrigger(if (BuildConfig.DEBUG) 10_000L else MIN_MEETING_MS)
+    private val energy = mapOf(EnergyKind.EV_CHARGE to EnergyWatcher(EnergyKind.EV_CHARGE), EnergyKind.FUEL to EnergyWatcher(EnergyKind.FUEL))
+    /** 이번 주차에서 포착 중인 주유·충전의 DB id */
+    private val refillIds = mutableMapOf<EnergyKind, Long>()
+    private val _dayClose = MutableStateFlow(false)
+    /** 하루 마감 화면을 띄울지 */
+    val dayClose: StateFlow<Boolean> = _dayClose
 
     var perKmRate: Int
         get() = settings.getInt("per_km_rate", 300)
         set(v) = settings.edit().putInt("per_km_rate", v).apply()
+    var claimMode: ClaimMode
+        get() = runCatching { ClaimMode.valueOf(settings.getString("claim_mode", null) ?: "") }.getOrDefault(ClaimMode.KM_RATE)
+        set(v) = settings.edit().putString("claim_mode", v.name).apply()
+    private val _privacy = MutableStateFlow(settings.getBoolean("privacy_on", true))
+    /** 동승자 보호 (기본 켬) */
+    val privacy: StateFlow<Boolean> = _privacy
+    fun setPrivacy(on: Boolean) { _privacy.value = on; settings.edit().putBoolean("privacy_on", on).apply() }
+    /** 이 시각 이후 운행이 끝나면 하루 마감을 권한다 */
+    var dayEndHour: Int
+        get() = settings.getInt("day_end_hour", 17)
+        set(v) = settings.edit().putInt("day_end_hour", v).apply()
+    /** 지금 업무 내용을 소리·화면으로 내면 안 되는가 */
+    val guestOnBoard: Boolean get() = _privacy.value && signals.cabin.value.guestOnBoard
     private val secure = SecurePrefs(context)
     var userName: String
         get() = secure.getString("user_name") ?: ""
@@ -100,17 +132,30 @@ class AppGraph(private val context: Context) {
         scope.launch {
             var prev = Gear.UNKNOWN
             signals.gear.collect { g ->
+                val now = System.currentTimeMillis()
                 lock.withLock {
-                    recorder.onGear(g, System.currentTimeMillis(), signals.odometerKm.value, signals.location.value)
+                    recorder.onGear(g, now, signals.odometerKm.value, signals.location.value)
                     _activeTrip.value = recorder.active
                 }
                 if (g != Gear.UNKNOWN) signals.log("기어: ${g.name}")
-                // 주차 → 출발 전환: 직전 운행이 거래처 방문이면 회고를 묻는다
-                if (prev == Gear.PARK && g != Gear.PARK && g != Gear.UNKNOWN) onDeparture()
+                // 주차 중 오른 배터리·연료 → 출발할 때 최종 값으로 확정
+                energy[EnergyKind.EV_CHARGE]!!.onGear(g, now, signals.socPct.value)?.let { onRefill(it, final = true) }
+                energy[EnergyKind.FUEL]!!.onGear(g, now, signals.fuelPct.value)?.let { onRefill(it, final = true) }
+                // 좌석 센서가 없는 차: 예전처럼 출발 순간에 회고를 묻는다
+                if (prev == Gear.PARK && g != Gear.PARK && g != Gear.UNKNOWN && !signals.cabin.value.known) askDebrief(delayMs = 4_000)
                 if (g == Gear.PARK) briefedThisTrip.clear()
                 prev = g
             }
         }
+        // 미팅 후 차에 다시 탐(P단·운전석 착석) → 회고
+        scope.launch {
+            signals.cabin.collect { c ->
+                if (!c.known) return@collect
+                if (debriefTrigger.onSeat(c.driverSeated, signals.gear.value, System.currentTimeMillis())) askDebrief(delayMs = 1_500)
+            }
+        }
+        scope.launch { signals.socPct.collect { pct -> energy[EnergyKind.EV_CHARGE]!!.onLevel(pct, System.currentTimeMillis())?.let { onRefill(it, final = false) } } }
+        scope.launch { signals.fuelPct.collect { pct -> energy[EnergyKind.FUEL]!!.onLevel(pct, System.currentTimeMillis())?.let { onRefill(it, final = false) } } }
         scope.launch {
             signals.odometerKm.collect { km -> if (km != null) lock.withLock { recorder.onOdometer(km) } }
         }
@@ -176,20 +221,26 @@ class AppGraph(private val context: Context) {
             ),
         )
         signals.log("운행 저장: %.1fkm · %s".format(trip.distanceKm, if (c.purpose == Purpose.BUSINESS) "업무($clientName)" else "미분류"))
+        maybeOfferDayClose(trip.endAt)
     }
 
     // ── 회고 (미팅 후) ─────────────────────────────────────────────
 
-    /** 거래처에 주차했다가 다시 출발 → 직전 운행이 업무 방문이고 아직 메모가 없으면 회고 요청. */
-    private fun onDeparture() = scope.launch {
+    /**
+     * 직전 운행이 업무 방문이고 아직 메모가 없으면 회고 요청.
+     * 좌석 센서가 있으면 미팅 후 차에 다시 탄 순간(출발 전), 없으면 출발 순간에 불린다.
+     * 동승자가 있으면 소리 내 묻지 않고 화면 배너만 남긴다.
+     */
+    private fun askDebrief(delayMs: Long) = scope.launch {
         val last = db.trips().latest() ?: return@launch
         val name = last.destinationName ?: return@launch
         if (last.purpose != Purpose.BUSINESS.name) return@launch
         if (System.currentTimeMillis() - last.endAt > DEBRIEF_WINDOW_MS) return@launch
         if (db.notes().countForTrip(last.id) > 0) return@launch
         _pendingDebrief.value = PendingDebrief(last.id, last.clientId, name)
-        delay(4_000) // 출발 직후 안전 확보 후 짧게
-        voice.speak("$name 미팅 어땠어요? 말씀하시면 상담 일지로 정리할게요.") {
+        delay(delayMs)
+        if (guestOnBoard) { signals.log("동승자 탑승 — 회고 질문은 화면에만 표시"); return@launch }
+        voice.speak("$name 미팅 어땠어요? 출발 전에 말씀하시면 상담 일지로 정리할게요.") {
             _listening.value = true
             voice.listen(
                 onResult = { text -> _listening.value = false; addNote(text) },
@@ -221,7 +272,7 @@ class AppGraph(private val context: Context) {
         )
         _pendingDebrief.value = null
         signals.log("상담 일지 저장: ${clientName ?: "거래처 미지정"} · 할 일 ${s.tasks.size}개")
-        voice.speak(if (s.tasks.isEmpty()) "상담 일지에 저장했어요." else "저장했어요. 할 일 ${s.tasks.size}개, ${s.tasks.first()}.")
+        voice.speak(if (s.tasks.isEmpty() || guestOnBoard) "상담 일지에 저장했어요." else "저장했어요. 할 일 ${s.tasks.size}개, ${s.tasks.first()}.")
     }
 
     fun dismissDebrief() { _pendingDebrief.value = null }
@@ -235,6 +286,7 @@ class AppGraph(private val context: Context) {
 
     /** 거래처 브리핑 문장을 만들어 읽는다. 같은 운행에서 같은 거래처는 1번만. */
     suspend fun brief(c: ClientEntity, force: Boolean = false): String {
+        if (!force && guestOnBoard) { signals.log("동승자 탑승 — ${c.name} 브리핑 보류(거래처 정보 보호)"); return "" }
         if (!force && !briefedThisTrip.add(c.id)) return ""
         val notes = db.notes().forClient(c.id)
         val open = notes.filter { !it.tasksDone }.flatMap { it.tasks.lines() }.filter { it.isNotBlank() }
@@ -254,7 +306,10 @@ class AppGraph(private val context: Context) {
         val trips = db.trips().between(from, to).map {
             ExportTrip(it.startAt, it.endAt, it.startOdometerKm, it.endOdometerKm, it.distanceKm, Purpose.valueOf(it.purpose), it.destinationName, it.tollFareEstimate)
         }
-        val r = reports.write(trips, ExportProfile(userName.ifBlank { "-" }, department.ifBlank { "-" }, perKmRate), from)
+        val refills = db.refills().between(from, to).map {
+            ExportRefill(it.startedAt, EnergyKind.valueOf(it.kind), it.fromPct, it.toPct, it.amount, Purpose.valueOf(it.purpose), it.place)
+        }
+        val r = reports.write(trips, refills, ExportProfile(userName.ifBlank { "-" }, department.ifBlank { "-" }, perKmRate, claimMode), from)
         signals.log("정산 파일 ${r.files.size}개 생성: ${r.files.joinToString { it.name }}")
         return r
     }
@@ -266,6 +321,81 @@ class AppGraph(private val context: Context) {
         val t = db.trips().latest() ?: return null
         db.trips().setPurpose(t.id, purpose.name)
         return t
+    }
+
+    // ── 주유·충전 포착 ─────────────────────────────────────────────
+
+    /** 주차 중 배터리·연료 상승 → 기록을 만들거나(첫 포착) 최신 값으로 고친다. 금액은 사용자가 넣는다. */
+    private fun onRefill(r: Refill, final: Boolean) = scope.launch {
+        lock.withLock {
+            val id = refillIds[r.kind]
+            if (id != null) {
+                db.refills().setTo(id, r.toPct)
+                if (final) refillIds.remove(r.kind) // 출발 — 이번 주차의 포착 끝
+                return@withLock
+            }
+            val last = db.trips().latest()
+            val purpose = if (last?.purpose == Purpose.BUSINESS.name) Purpose.BUSINESS else Purpose.UNKNOWN
+            val here = signals.location.value
+            refillIds[r.kind] = db.refills().insert(
+                RefillEntity(kind = r.kind.name, startedAt = r.startedAt, fromPct = r.fromPct, toPct = r.toPct, lat = here?.lat, lon = here?.lon, place = last?.destinationName, purpose = purpose.name),
+            )
+            signals.log("${r.kind.label} 포착: ${r.fromPct}% → ${r.toPct}% (${purpose.name})")
+            if (final) refillIds.remove(r.kind)
+            else if (signals.cabin.value.driverSeated || !signals.cabin.value.known) {
+                voice.speak((if (r.kind == EnergyKind.EV_CHARGE) "충전이" else "주유가") + " 확인됐어요. 금액만 넣으면 유류비 정산에 들어가요.")
+            }
+        }
+    }
+
+    fun setRefillAmount(id: Long, amount: Long?) = scope.launch { db.refills().setAmount(id, amount) }
+    fun setRefillPurpose(id: Long, purpose: Purpose) = scope.launch { db.refills().setPurpose(id, purpose.name) }
+
+    // ── 하루 마감 ─────────────────────────────────────────────────
+
+    private fun today(now: Long = System.currentTimeMillis()): Pair<Long, Long> {
+        val c = java.util.Calendar.getInstance().apply { timeInMillis = now; set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }
+        val from = c.timeInMillis
+        return from to from + DAY_MS
+    }
+
+    suspend fun dayCloseInput(): DayCloseInput {
+        val (from, to) = today()
+        val trips = db.trips().between(from, to)
+        val notes = db.notes().all().filter { !it.tasksDone }
+        return DayCloseInput(
+            trips = trips.size,
+            businessKm = trips.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.distanceKm },
+            unknownTrips = trips.count { it.purpose == Purpose.UNKNOWN.name },
+            refillsWithoutAmount = db.refills().between(from, to).count { it.amount == null },
+            openTasks = notes.flatMap { it.tasks.lines() }.filter { it.isNotBlank() },
+            tomorrowClients = notes.filter { (it.followUpAt ?: 0) in to until to + DAY_MS }.mapNotNull { it.clientName }.distinct(),
+        )
+    }
+
+    /** 퇴근 시각 이후 운행이 끝났고 오늘 아직 마감하지 않았으면 하루 마감을 권한다 (하루 1번). */
+    private suspend fun maybeOfferDayClose(endAt: Long) {
+        val hour = java.util.Calendar.getInstance().apply { timeInMillis = endAt }.get(java.util.Calendar.HOUR_OF_DAY)
+        val key = today(endAt).first
+        if (hour < dayEndHour || settings.getLong("day_close_offered", 0) == key) return
+        settings.edit().putLong("day_close_offered", key).apply()
+        openDayClose()
+    }
+
+    /** 하루 마감 화면을 열고 요약을 읽어 준다 (화면의 "오늘 마감" 버튼도 여기로). */
+    fun openDayClose() = scope.launch {
+        _dayClose.value = true
+        val input = dayCloseInput()
+        if (signals.cabin.value.driverSeated || !signals.cabin.value.known) voice.speak(DayClose.speech(input, guestOnBoard))
+    }
+
+    fun cancelDayClose() { _dayClose.value = false }
+
+    fun finishDayClose() {
+        _dayClose.value = false
+        settings.edit().putLong("day_closed", today().first).apply()
+        voice.speak("오늘 마감했어요.")
+        signals.log("하루 마감 완료")
     }
 
     fun setTasksDone(noteId: Long, done: Boolean) = scope.launch { db.notes().setDone(noteId, done) }
@@ -283,6 +413,9 @@ class AppGraph(private val context: Context) {
     private companion object {
         const val BRIEF_RADIUS_M = 1_000.0
         const val DEBRIEF_WINDOW_MS = 3 * 60 * 60 * 1000L
+        /** 이만큼 차를 떠나 있었으면 미팅을 한 것으로 본다 (짐 꺼내기 등 잠깐 내림은 제외) */
+        const val MIN_MEETING_MS = 3 * 60 * 1000L
+        const val DAY_MS = 24 * 60 * 60 * 1000L
     }
 }
 
