@@ -39,9 +39,19 @@ class NoteAssistantTest {
     fun `브리핑 문장 - 첫 방문과 재방문`() {
         assertTrue(Briefing.text("서울아산병원", null, emptyList(), 0).contains("첫 방문"))
         val t = Briefing.text("서울아산병원", "견적 검토 중", listOf("카탈로그 보내기"), 2)
-        assertTrue(t.contains("지난 미팅: 견적 검토 중"))
+        assertTrue(t.contains("지난번, 견적 검토 중"))
         assertTrue(t.contains("남은 할 일 1개, 카탈로그 보내기"))
         assertNotNull(t)
+    }
+
+    @Test
+    fun `할 일은 짧게 기한은 날짜로, 요약은 메모처럼`() = runBlocking {
+        val r = RuleNoteAssistant().structure("원장님이 신제품 샘플 반응이 좋다고 하셨어요 다음 주 화요일에 다시 연락 주신대요 그리고 금요일까지 단가표 보내 드리기로 했어요", "한빛병원", now)
+        assertEquals("원장님: 신제품 샘플 반응이 좋음", r.summary)
+        assertEquals(1, r.tasks.size)
+        assertTrue(r.tasks[0], r.tasks[0].startsWith("단가표 보내기 · ") && r.tasks[0].endsWith("(금)까지"))
+        assertEquals("반응이 큼", RuleNoteAssistant().tidySummary("반응이 크대요"))
+        assertEquals("다음 달 발주한다고 하셨어요", RuleNoteAssistant().tidySummary("다음 달 발주한다고 하셨어요")) // 동사 현재형은 그대로
     }
 }
 
@@ -72,7 +82,8 @@ class LlmParseTest {
     @Test
     fun `상대가 할 일은 내 할 일로 넣지 않고 후속 일정만 잡는다`() = kotlinx.coroutines.runBlocking {
         val r = RuleNoteAssistant().structure("원장님이 샘플 반응이 좋대요 다음 주 화요일에 다시 연락 주신대요 그리고 금요일까지 단가표 보내 드리기로 했어요", "한빛병원")
-        org.junit.Assert.assertEquals(listOf("금요일까지 단가표 보내 드리기로 했어요"), r.tasks)
+        org.junit.Assert.assertEquals(1, r.tasks.size)
+        org.junit.Assert.assertTrue(r.tasks[0].startsWith("단가표 보내기"))
         org.junit.Assert.assertNotNull(r.followUpAt)
     }
 }

@@ -238,11 +238,11 @@ internal fun DayClosePanel(graph: AppGraph) {
         Spacer(Modifier.height(12.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (unknown.isNotEmpty()) {
-                item { Section("미분류 운행 — 업무·개인을 골라 주세요") }
+                item { Section("이번 달 미분류 운행 — 업무·개인을 골라 주세요") }
                 items(unknown, key = { "t${it.id}" }) { t -> TripRow(t, guest) { p -> graph.setPurpose(t.id, p) } }
             }
             if (missing.isNotEmpty()) {
-                item { Section("금액을 안 넣은 주유·충전") }
+                item { Section("이번 달 금액을 안 넣은 주유·충전") }
                 items(missing, key = { "r${it.id}" }) { r -> RefillRow(graph, r) }
             }
             if (open.isNotEmpty()) {

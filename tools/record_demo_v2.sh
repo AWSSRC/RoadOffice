@@ -68,7 +68,7 @@ stop 05
 say "06 충전 금액 입력"
 tap "오늘 운행"; sleep 1
 rec
-sleep 2; tap "금액(원)"; sleep 1; $ADB shell input text 18500; sleep 1; $ADB shell input keyevent 111 || true; sleep 1; tap "저장"; sleep 4
+sleep 2; tap "금액(원)"; sleep 1; $ADB shell input text 18500; sleep 2; $ADB shell input keyevent 111 || true; sleep 2; tap "저장"; sleep 5
 stop 06
 
 say "07 거래처 아닌 곳 운행 → Gleo '이번 운행 업무로 해 줘'"
@@ -92,7 +92,7 @@ stop 08
 
 say "09 월 정산 내보내기"
 rec
-tap "워크마일"; sleep 5
+tap "워크마일"; sleep 2; tap "km 단가"; sleep 3   # 월 정산은 km 단가로 — 업무 km × 회사 단가
 for k in 1 2 3; do tools/ui.sh tap "이번 달 정산 내보내기" | grep -q "^tap" && break; $ADB shell input swipe 1600 1100 1600 500 300; sleep 2; done
 sleep 6
 stop 09
