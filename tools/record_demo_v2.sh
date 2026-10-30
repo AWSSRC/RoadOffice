@@ -24,6 +24,7 @@ LAT=37.4959; LON=127.0293   # 한빛병원(가상)
 
 say "준비: 깨끗한 설치 + 이번 달 기록 + 실비 정산"
 seat passenger false; seat rear_left false; seat rear_right false; seat driver true; soc 55; put "gear?gear=Park"
+post "ev-battery?field=charge_port_open&value=false"; post "ev-battery?field=charge_switch&value=false"   # 계기판 '충전구 열림' 경고 끄기
 $ADB uninstall com.roadoffice.app >/dev/null 2>&1 || true
 $ADB install -g app/build/outputs/apk/debug/app-debug.apk >/dev/null
 geo $LAT $LON; sleep 2

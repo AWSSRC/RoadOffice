@@ -8,6 +8,7 @@ import com.roadoffice.app.data.MeetingNoteEntity
 import com.roadoffice.app.data.RefillEntity
 import com.roadoffice.app.data.TripEntity
 import com.roadoffice.app.graph
+import com.roadoffice.app.meeting.RuleNoteAssistant
 import com.roadoffice.app.workmile.EnergyKind
 import com.roadoffice.app.workmile.Purpose
 import java.util.Calendar
@@ -18,6 +19,7 @@ import kotlin.random.Random
  * adb shell am broadcast -a com.roadoffice.app.DEMO_SEED -n com.roadoffice.app/.demo.DemoSeedReceiver [--ez month true]
  * 첫 거래처는 현재 위치로 등록해 도착 시 업무로 분류되게 한다. 이름은 모두 가상.
  * month=true 면 이번 달 1일~어제까지의 운행·상담 일지·충전 기록도 채운다 (월말 정산 화면·PDF 시연용).
+ * 상담 일지는 회고 원문만 가상으로 쓰고, 요약·할 일·후속 일정은 앱의 규칙 정리기가 만든 결과를 그대로 저장한다.
  */
 class DemoSeedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -47,6 +49,21 @@ class DemoSeedReceiver : BroadcastReceiver() {
     /** 평일 하루 2~4곳 방문, 주말 개인 운행 1건, 미분류 2건, 충전 4건(1건 금액 미입력). 주행거리계는 이어지게. */
     private suspend fun seedMonth(g: com.roadoffice.app.AppGraph, now: Long) {
         val rnd = Random(1028)
+        val rule = RuleNoteAssistant()
+        val talks = listOf(
+            "원장님이 신제품 반응이 좋대요 금요일까지 단가표 보내 드리기로 했어요",
+            "이번 달은 재고가 많대요 다음 달 초에 다시 방문하기로 했어요",
+            "약국장님이 샘플을 더 원하셨어요 내일 샘플 챙겨 가기로 했어요",
+            "실장님이 경쟁사 견적을 받았대요 이번 주 목요일까지 비교표 보내 드리기로 했어요",
+            "원장님이 바쁘셔서 간단히 인사만 드렸어요",
+        )
+        suspend fun note(clientId: Long?, name: String, tripId: Long?, at: Long, raw: String, done: Boolean) {
+            val r = rule.structure(raw, name, at)
+            g.db.notes().insert(
+                MeetingNoteEntity(clientId = clientId, clientName = name, tripId = tripId, createdAt = at, rawText = raw, summary = r.summary,
+                    tasks = r.tasks.joinToString("\n"), followUpAt = r.followUpAt, source = r.source, tasksDone = done),
+            )
+        }
         val clients = g.db.clients().all().associateBy { it.name }
         val names = listOf("한빛병원", "새솔내과의원", "미래약국", "푸른정형외과", "다온소아과", "하늘약국")
         val day = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.DAY_OF_MONTH, 1) }
@@ -80,15 +97,7 @@ class DemoSeedReceiver : BroadcastReceiver() {
                 )
                 odo += km
                 if (purpose == Purpose.BUSINESS && rnd.nextInt(3) == 0) {
-                    val c = clients[name]
-                    g.db.notes().insert(
-                        MeetingNoteEntity(
-                            clientId = c?.id, clientName = name, tripId = tripId, createdAt = end + 50 * 60_000L,
-                            rawText = "샘플 반응 좋음, 다음 주 재방문", summary = "신제품 샘플 반응 좋음",
-                            tasks = "단가표 보내기", followUpAt = null, source = "rule",
-                            tasksDone = day.get(Calendar.DAY_OF_MONTH) < today - 4,
-                        ),
-                    )
+                    note(clients[name]?.id, name, tripId, end + 50 * 60_000L, talks[rnd.nextInt(talks.size)], day.get(Calendar.DAY_OF_MONTH) < today - 4)
                 }
                 if (purpose == Purpose.BUSINESS && charges < 4 && day.get(Calendar.DAY_OF_MONTH) % 7 == 3 && i == 0) {
                     charges++
@@ -105,22 +114,9 @@ class DemoSeedReceiver : BroadcastReceiver() {
             day.add(Calendar.DAY_OF_MONTH, 1)
         }
         // 한빛병원 최근 상담 — 다음 방문 브리핑에 남은 할 일이 나오게
-        g.db.notes().insert(
-            MeetingNoteEntity(
-                clientId = clients["한빛병원"]?.id, clientName = "한빛병원", tripId = null, createdAt = now - 2 * 24 * 3_600_000L,
-                rawText = "원장님이 견적 금액 조정 원하심, 금요일까지 수정 견적 보내기로", summary = "원장님 견적 금액 조정 요청",
-                tasks = "수정 견적서 보내기", followUpAt = null, source = "rule",
-            ),
-        )
+        note(clients["한빛병원"]?.id, "한빛병원", null, now - 2 * 24 * 3_600_000L, "원장님 견적 금액 조정 요청. 수정 견적서 보내 드리기로 했어요", false)
         // 내일 후속 일정 1건 (하루 마감의 "내일 일정" 시연)
-        val tomorrow = Calendar.getInstance().apply { timeInMillis = now; add(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 10) }.timeInMillis
-        g.db.notes().insert(
-            MeetingNoteEntity(
-                clientId = clients["새솔내과의원"]?.id, clientName = "새솔내과의원", tripId = null, createdAt = now - 26 * 3_600_000L,
-                rawText = "원장님 내일 오전에 다시 연락 달라고 하심", summary = "원장님 재연락 요청", tasks = "원장님께 전화",
-                followUpAt = tomorrow, source = "rule",
-            ),
-        )
+        note(clients["새솔내과의원"]?.id, "새솔내과의원", null, now - 2 * 3_600_000L, "원장님이 내일 오전에 전화 달라고 하셨어요", false)
     }
 
     private fun at(day: Calendar, minuteOfDay: Int): Long = (day.clone() as Calendar).apply {

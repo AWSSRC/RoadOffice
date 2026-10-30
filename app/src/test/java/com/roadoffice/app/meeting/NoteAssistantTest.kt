@@ -87,3 +87,16 @@ class LlmParseTest {
         org.junit.Assert.assertNotNull(r.followUpAt)
     }
 }
+
+class DemoTalkTest {
+    private val now = java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.OCTOBER, 28, 15, 0, 0) }.timeInMillis
+
+    @Test
+    fun `시연 데이터 회고도 정리기 규칙대로 - 원문에 없는 할 일을 만들지 않는다`() = kotlinx.coroutines.runBlocking {
+        val a = RuleNoteAssistant()
+        org.junit.Assert.assertEquals(emptyList<String>(), a.structure("원장님이 바쁘셔서 간단히 인사만 드렸어요", "새솔", now).tasks)
+        val b = a.structure("원장님 견적 금액 조정 요청. 수정 견적서 보내 드리기로 했어요", "한빛병원", now)
+        org.junit.Assert.assertEquals("원장님 견적 금액 조정 요청", b.summary)
+        org.junit.Assert.assertEquals(listOf("수정 견적서 보내기"), b.tasks)
+    }
+}
