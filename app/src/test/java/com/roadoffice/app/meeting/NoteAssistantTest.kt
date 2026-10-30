@@ -99,4 +99,10 @@ class DemoTalkTest {
         org.junit.Assert.assertEquals("원장님 견적 금액 조정 요청", b.summary)
         org.junit.Assert.assertEquals(listOf("수정 견적서 보내기"), b.tasks)
     }
+
+    @Test
+    fun `약속 표현 "~기로 했어요"도 할 일`() = kotlinx.coroutines.runBlocking {
+        val r = RuleNoteAssistant().structure("약국장님이 샘플을 더 원하셨어요 내일 샘플 챙겨 가기로 했어요", "미래약국", now)
+        org.junit.Assert.assertEquals(listOf("샘플 챙겨 가기"), r.tasks)
+    }
 }

@@ -19,12 +19,14 @@ class ReportWriter(private val context: Context) {
 
     data class Result(val files: List<File>)
 
-    fun write(trips: List<ExportTrip>, refills: List<ExportRefill>, profile: ExportProfile, monthStart: Long): Result {
+    fun write(trips: List<ExportTrip>, refills: List<ExportRefill>, profile: ExportProfile, monthStart: Long,
+              activities: List<ExportActivity> = emptyList(), header: HeaderStyle = HeaderStyle.KOREAN): Result {
         val ym = stamp.format(Date(monthStart))
         val log = File(dir, "운행기록부_$ym.csv").apply { writeText(Exporter.mileageLogCsv(trips, profile)) }
         val claim = File(dir, "유류비청구서_$ym.csv").apply { writeText(Exporter.fuelClaimCsv(trips, profile, refills)) }
         val pdf = File(dir, "워크마일_정산_$ym.pdf").also { writePdf(it, trips, refills, profile, monthStart) }
-        return Result(listOf(log, claim, pdf))
+        val act = File(dir, "상담활동_$ym.csv").apply { writeText(Exporter.activityCsv(activities, header)) }
+        return Result(listOf(log, claim, pdf, act))
     }
 
     /** A4 세로 1장 이상 — 요약 + 업무 운행 목록 + 주유·충전 기록. */

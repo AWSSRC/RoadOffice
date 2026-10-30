@@ -18,6 +18,21 @@ data class ExportTrip(
     val commute: Boolean = false,
 )
 
+/** 상담 활동 한 줄 — 회사 SFA·CRM 의 "가져오기(Import)"에 넣을 수 있게 (상담 원문은 넣지 않는다). */
+data class ExportActivity(
+    val at: Long,
+    val client: String?,
+    val summary: String,
+    val tasks: List<String>,
+    val tasksDone: Boolean,
+    val followUpAt: Long?,
+    /** 이 방문의 운행 거리 (운행과 연결된 경우) */
+    val visitKm: Double?,
+)
+
+/** 열 이름 — 영어는 SFA 가져오기 화면에서 열을 맞추기 쉽게 (특정 제품 형식을 보장하지는 않음). */
+enum class HeaderStyle(val label: String) { KOREAN("한국어"), ENGLISH("영어(SFA 가져오기용)") }
+
 /** 주유·충전 기록 한 줄. 금액은 사용자가 넣기 전엔 null. */
 data class ExportRefill(val at: Long, val kind: EnergyKind, val fromPct: Int, val toPct: Int, val amount: Long?, val purpose: Purpose, val place: String?)
 
@@ -46,6 +61,33 @@ object Exporter {
     private const val BOM = "﻿"
     private val day = SimpleDateFormat("yyyy-MM-dd(E)", Locale.KOREA)
     private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
+
+    /**
+     * 상담 활동 CSV — "이중 입력" 줄이기: 차에서 정리된 상담 일지를 회사 SFA·CRM 가져오기에 그대로.
+     * 상담 원문(말한 문장)은 개인정보·민감 내용이 섞일 수 있어 넣지 않는다 (요약·할 일·후속 일정만).
+     */
+    fun activityCsv(list: List<ExportActivity>, header: HeaderStyle = HeaderStyle.KOREAN): String = buildString {
+        append(BOM)
+        appendLine(
+            if (header == HeaderStyle.KOREAN) "날짜,시간,거래처,활동 유형,요약,할 일,할 일 상태,후속 일정,방문 운행 거리(km)"
+            else "Date,Time,Account,Type,Subject,Next Steps,Status,Follow-up Date,Distance (km)",
+        )
+        val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+        list.sortedBy { it.at }.forEach { a ->
+            row(
+                ymd.format(Date(a.at)), hm.format(Date(a.at)), a.client ?: "",
+                if (header == HeaderStyle.KOREAN) "방문" else "Visit",
+                a.summary, a.tasks.joinToString(" / "),
+                when {
+                    a.tasks.isEmpty() -> ""
+                    a.tasksDone -> if (header == HeaderStyle.KOREAN) "완료" else "Completed"
+                    else -> if (header == HeaderStyle.KOREAN) "진행 중" else "Open"
+                },
+                a.followUpAt?.let { ymd.format(Date(it)) } ?: "",
+                a.visitKm?.let { km(it) } ?: "",
+            )
+        }
+    }
 
     fun mileageLogCsv(trips: List<ExportTrip>, p: ExportProfile): String = buildString {
         append(BOM)

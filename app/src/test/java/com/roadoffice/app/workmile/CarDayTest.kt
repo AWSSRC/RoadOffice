@@ -118,3 +118,24 @@ class ClaimModeTest {
         assertTrue(csv.contains("19500")) // 18,000 + 통행료 1,500
     }
 }
+
+class ActivityCsvTest {
+    private val at = java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.OCTOBER, 30, 14, 15, 0) }.timeInMillis
+    private val a = ExportActivity(at, "한빛병원", "원장님: 신제품 샘플 반응이 좋음", listOf("단가표 보내기 · 10/30(금)까지"), false, at + 4 * 86_400_000L, 9.0)
+
+    @Test
+    fun `상담 활동 CSV - 요약·할 일·후속 일정, 원문은 넣지 않는다`() {
+        val csv = Exporter.activityCsv(listOf(a))
+        val row = csv.lines()[1]
+        assertTrue(csv.startsWith("﻿날짜,시간,거래처"))
+        assertTrue(row.startsWith("2026-10-30,14:15,한빛병원,방문,원장님: 신제품 샘플 반응이 좋음,단가표 보내기 · 10/30(금)까지,진행 중,2026-11-03,9.0"))
+    }
+
+    @Test
+    fun `영어 열 이름과 쉼표 이스케이프`() {
+        val csv = Exporter.activityCsv(listOf(a.copy(summary = "견적, 샘플 요청", tasks = emptyList(), visitKm = null)), HeaderStyle.ENGLISH)
+        assertTrue(csv.lines()[0].endsWith("Date,Time,Account,Type,Subject,Next Steps,Status,Follow-up Date,Distance (km)"))
+        assertTrue(csv.lines()[1].contains("\"견적, 샘플 요청\""))
+        assertTrue(csv.lines()[1].contains(",Visit,"))
+    }
+}

@@ -23,7 +23,9 @@ import com.roadoffice.app.workmile.DayClose
 import com.roadoffice.app.workmile.DayCloseInput
 import com.roadoffice.app.workmile.EnergyKind
 import com.roadoffice.app.workmile.EnergyWatcher
+import com.roadoffice.app.workmile.ExportActivity
 import com.roadoffice.app.workmile.ExportRefill
+import com.roadoffice.app.workmile.HeaderStyle
 import com.roadoffice.app.workmile.ExportProfile
 import com.roadoffice.app.workmile.ExportTrip
 import com.roadoffice.app.workmile.Gear
@@ -117,6 +119,10 @@ class AppGraph(private val context: Context) {
     var perKmRate: Int
         get() = settings.getInt("per_km_rate", 300)
         set(v) = settings.edit().putInt("per_km_rate", v).apply()
+    /** 상담 활동 CSV 열 이름 (한국어 / 영어 — SFA 가져오기용) */
+    var exportHeader: HeaderStyle
+        get() = runCatching { HeaderStyle.valueOf(settings.getString("export_header", null) ?: "") }.getOrDefault(HeaderStyle.KOREAN)
+        set(v) = settings.edit().putString("export_header", v.name).apply()
     var claimMode: ClaimMode
         get() = runCatching { ClaimMode.valueOf(settings.getString("claim_mode", null) ?: "") }.getOrDefault(ClaimMode.KM_RATE)
         set(v) = settings.edit().putString("claim_mode", v.name).apply()
@@ -359,7 +365,11 @@ class AppGraph(private val context: Context) {
         val refills = db.refills().between(from, to).map {
             ExportRefill(it.startedAt, EnergyKind.valueOf(it.kind), it.fromPct, it.toPct, it.amount, Purpose.valueOf(it.purpose), it.place)
         }
-        val r = reports.write(trips, refills, ExportProfile(userName.ifBlank { "-" }, department.ifBlank { "-" }, perKmRate, claimMode), from)
+        val tripKm = db.trips().between(from, to).associate { it.id to it.distanceKm }
+        val activities = db.notes().all().filter { it.createdAt in from until to }.map {
+            ExportActivity(it.createdAt, it.clientName, it.summary, it.tasks.lines().filter { t -> t.isNotBlank() }, it.tasksDone, it.followUpAt, it.tripId?.let { id -> tripKm[id] })
+        }
+        val r = reports.write(trips, refills, ExportProfile(userName.ifBlank { "-" }, department.ifBlank { "-" }, perKmRate, claimMode), from, activities, exportHeader)
         signals.log("정산 파일 ${r.files.size}개 생성: ${r.files.joinToString { it.name }}")
         return r
     }

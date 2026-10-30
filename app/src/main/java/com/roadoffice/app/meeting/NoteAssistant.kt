@@ -25,6 +25,7 @@ interface NoteAssistant {
  */
 class RuleNoteAssistant : NoteAssistant {
     private val taskWords = listOf("보내", "연락", "전화", "제출", "준비", "확인", "방문", "하기로", "드리기로", "까지", "회신", "미팅 잡")
+    private val promise = Regex("기로\\s?(했|함|해요|하자)")
     private val othersAction = listOf("주신대", "주신다고", "주시기로", "하신대", "하신다고", "주실 거", "준대요", "준다고")
     private val weekdays = mapOf('월' to Calendar.MONDAY, '화' to Calendar.TUESDAY, '수' to Calendar.WEDNESDAY, '목' to Calendar.THURSDAY, '금' to Calendar.FRIDAY, '토' to Calendar.SATURDAY, '일' to Calendar.SUNDAY)
 
@@ -34,7 +35,8 @@ class RuleNoteAssistant : NoteAssistant {
             .map { it.trim().trimEnd('.', ',').replace(Regex("^(그리고|그래서|또|그리고요|아 |음 )\\s*"), "") }
             .filter { it.isNotEmpty() }
         // 상대가 할 일("연락 주신대요")은 내 할 일이 아니다 — 후속 일정으로만 잡힌다
-        val tasks = sentences.filter { s -> taskWords.any { s.contains(it) } && othersAction.none { s.contains(it) } }
+        // "~기로 했어요"(가져가기로·만나기로 등)는 내가 한 약속 → 할 일
+        val tasks = sentences.filter { s -> (taskWords.any { s.contains(it) } || promise.containsMatchIn(s)) && othersAction.none { s.contains(it) } }
             .map { tidyTask(it, now) }.distinct()
         val summary = tidySummary(sentences.firstOrNull() ?: clean).let { if (it.length > 60) it.take(59) + "…" else it }
         return MeetingSummary(summary, tasks, findDate(clean, now), "rule")

@@ -48,6 +48,7 @@ import com.roadoffice.app.data.MeetingNoteEntity
 import com.roadoffice.app.data.TripEntity
 import com.roadoffice.app.workmile.ClaimMode
 import com.roadoffice.app.workmile.Gear
+import com.roadoffice.app.workmile.HeaderStyle
 import com.roadoffice.app.workmile.LatLng
 import com.roadoffice.app.workmile.Purpose
 import com.roadoffice.app.workmile.WorkMileSummary
@@ -286,6 +287,15 @@ private fun WorkMileTab(graph: AppGraph) {
     var name by remember { mutableStateOf(graph.userName) }
     var dept by remember { mutableStateOf(graph.department) }
     var result by remember { mutableStateOf<String?>(null) }
+    var header by remember { mutableStateOf(graph.exportHeader) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("상담 활동 CSV 열 이름", color = Color.White, fontSize = 22.sp)
+        Spacer(Modifier.width(16.dp))
+        HeaderStyle.entries.forEach { h -> Chip(h.label, h == header) { header = h; graph.exportHeader = h } }
+        Spacer(Modifier.width(12.dp))
+        Text("회사 SFA·CRM 가져오기에 그대로 — 상담 원문은 넣지 않아요", color = Sub, fontSize = 20.sp)
+    }
+    Spacer(Modifier.height(12.dp))
     val scope = rememberCoroutineScope()
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(value = dept, onValueChange = { dept = it.take(30); graph.department = dept }, singleLine = true, label = { Text("부서") }, modifier = Modifier.width(260.dp))
@@ -299,7 +309,7 @@ private fun WorkMileTab(graph: AppGraph) {
     }
     result?.let {
         Spacer(Modifier.height(10.dp))
-        Text("만들어진 파일 (운행기록부·유류비 청구서 CSV, 정산 PDF):\n$it", color = Color.White, fontSize = 22.sp)
+        Text("만들어진 파일 (운행기록부·유류비 청구서·상담 활동 CSV, 정산 PDF):\n$it", color = Color.White, fontSize = 22.sp)
     }
 }
 
