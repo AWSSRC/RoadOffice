@@ -179,7 +179,9 @@ private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
 @Composable
 private fun TodayTab(graph: AppGraph) {
     val (from, to) = remember { dayRange() }
-    val trips by graph.db.trips().observeBetween(from, to).collectAsState(initial = emptyList())
+    // 처음 읽기 전에는 빈 목록·"0건"을 보여 주지 않는다 (불러오는 동안 0건이 깜빡이는 문제)
+    val loadedTrips by graph.db.trips().observeBetween(from, to).collectAsState(initial = null as List<TripEntity>?)
+    val trips = loadedTrips ?: return
     val business = trips.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.distanceKm }
     val guest = rememberGuest(graph)
     // 퇴근 시각 전에는 마감 버튼을 눈에 덜 띄게
@@ -355,7 +357,8 @@ private val dayOnly = SimpleDateFormat("M/d(E)", Locale.KOREA)
 @Composable
 private fun NotesTab(graph: AppGraph) {
     if (!PrivacyGate(graph, "상담 일지")) return
-    val notes by graph.db.notes().observeAll().collectAsState(initial = emptyList())
+    val loadedNotes by graph.db.notes().observeAll().collectAsState(initial = null as List<MeetingNoteEntity>?)
+    val notes = loadedNotes ?: return // 불러오는 동안 "0건"·빈 안내를 깜빡이지 않게
     val openTasks = notes.filter { !it.tasksDone }.sumOf { n -> n.tasks.lines().count { it.isNotBlank() } }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Stat("상담 일지", "${notes.size}건")
