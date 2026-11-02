@@ -66,12 +66,14 @@ class DemoSeedReceiver : BroadcastReceiver() {
         }
         val clients = g.db.clients().all().associateBy { it.name }
         val names = listOf("한빛병원", "새솔내과의원", "미래약국", "푸른정형외과", "다온소아과", "하늘약국")
-        val day = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.DAY_OF_MONTH, 1) }
-        val today = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.DAY_OF_MONTH)
+        // 지난달 1일부터 어제까지 — 월초에 지난달 정산을 시연할 수 있게
+        val day = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.DAY_OF_MONTH, 1); add(Calendar.MONTH, -1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0) }
+        val todayStart = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+        fun daysAgo() = ((todayStart - day.timeInMillis) / 86_400_000L).toInt()
         var odo = 11_840.0
         var unknownLeft = 2
         var charges = 0
-        while (day.get(Calendar.DAY_OF_MONTH) < today) {
+        while (day.timeInMillis < todayStart) {
             val weekend = day.get(Calendar.DAY_OF_WEEK) in listOf(Calendar.SATURDAY, Calendar.SUNDAY)
             val stops = if (weekend) 1 else 2 + rnd.nextInt(3)
             var minute = 8 * 60 + 40 + rnd.nextInt(30)
@@ -83,7 +85,7 @@ class DemoSeedReceiver : BroadcastReceiver() {
                 val name = if (weekend) "마트" else names[(day.get(Calendar.DAY_OF_MONTH) + i) % names.size]
                 val purpose = when {
                     weekend -> Purpose.PERSONAL
-                    unknownLeft > 0 && day.get(Calendar.DAY_OF_MONTH) >= today - 3 && i == stops - 1 -> { unknownLeft--; Purpose.UNKNOWN }
+                    unknownLeft > 0 && daysAgo() <= 3 && i == stops - 1 -> { unknownLeft--; Purpose.UNKNOWN }
                     else -> Purpose.BUSINESS
                 }
                 val tripId = g.db.trips().insert(
@@ -97,7 +99,7 @@ class DemoSeedReceiver : BroadcastReceiver() {
                 )
                 odo += km
                 if (purpose == Purpose.BUSINESS && rnd.nextInt(3) == 0) {
-                    note(clients[name]?.id, name, tripId, end + 50 * 60_000L, talks[(day.get(Calendar.DAY_OF_MONTH) + i) % talks.size] /* rnd 를 쓰지 않아야 운행·정산 숫자가 바뀌지 않는다 */, day.get(Calendar.DAY_OF_MONTH) < today - 4)
+                    note(clients[name]?.id, name, tripId, end + 50 * 60_000L, talks[(day.get(Calendar.DAY_OF_MONTH) + i) % talks.size] /* rnd 를 쓰지 않아야 운행·정산 숫자가 바뀌지 않는다 */, daysAgo() > 4)
                 }
                 if (purpose == Purpose.BUSINESS && charges < 4 && day.get(Calendar.DAY_OF_MONTH) % 7 == 3 && i == 0) {
                     charges++

@@ -29,6 +29,9 @@ $ADB uninstall com.roadoffice.app >/dev/null 2>&1 || true
 $ADB install -g app/build/outputs/apk/debug/app-debug.apk >/dev/null
 geo $LAT $LON; sleep 2
 $ADB shell am start -n com.roadoffice.app/.MainActivity >/dev/null; sleep 12
+# 거래처(한빛병원)를 현재 위치로 등록하려면 앱이 위치를 받은 뒤여야 한다 — 에뮬레이터 재부팅 직후엔 늦게 온다
+for k in 1 2 3 4 5 6 7 8; do geo $LAT $LON; sleep 3; tools/ui.sh tap "신호" >/dev/null; sleep 1; tools/ui.sh texts | grep -q "37.496" && break; done
+tools/ui.sh tap "오늘 운행" >/dev/null
 $ADB shell am broadcast -a com.roadoffice.app.DEMO_SEED -n com.roadoffice.app/.demo.DemoSeedReceiver --ez month true >/dev/null; sleep 4
 tap "워크마일"; sleep 1; tap "실비"; sleep 1; tap "오늘 운행"; sleep 1
 geo 37.4500 $LON; sleep 2
@@ -56,9 +59,15 @@ stop 03
 
 say "04 회고 답 → 상담 일지 (에뮬레이터 마이크 미지원 — 같은 문장을 Gleo 메모로 전달)"
 rec
-gleo ADD_MEETING_NOTE '{"note":"원장님이 신제품 샘플 반응이 좋다고 하셨어요 다음 주 화요일에 다시 연락 주신대요 그리고 금요일까지 단가표 보내 드리기로 했어요","clientName":"한빛병원"}'
-sleep 5; tap "상담 일지"; sleep 6
+# 음성 인식이 거래처 이름을 띄어·틀리게 받은 상황("한빗 병원") — 사전 교정으로 바로잡히는지 함께 보여 준다
+gleo ADD_MEETING_NOTE '{"note":"한빗 병원 원장님이 신제품 샘플 반응이 좋다고 하셨어요 다음 주 화요일에 다시 연락 주신대요 그리고 금요일까지 단가표 보내 드리기로 했어요"}'
+sleep 5; tap "상담 일지"; sleep 9
 stop 04
+
+say "04b 정차 중 확인 — '확인 필요' → 맞아요"
+rec
+sleep 2; tap "맞아요"; sleep 4
+stop 04b
 
 say "05 동승자 탑승 → 보호"
 rec
@@ -94,7 +103,7 @@ stop 08
 say "09 월 정산 내보내기"
 rec
 tap "워크마일"; sleep 2; tap "km 단가"; sleep 3   # 월 정산은 km 단가로 — 업무 km × 회사 단가
-for k in 1 2 3; do tools/ui.sh tap "이번 달 정산 내보내기" | grep -q "^tap" && break; $ADB shell input swipe 1600 1100 1600 500 300; sleep 2; done
+for k in 1 2 3; do tools/ui.sh tap "정산 파일 내보내기" | grep -q "^tap" && break; $ADB shell input swipe 1600 1100 1600 500 300; sleep 2; done
 sleep 6
 stop 09
 F=$($ADB shell run-as com.roadoffice.app --user 10 ls files/reports/ | grep pdf | head -1 | tr -d '\r')

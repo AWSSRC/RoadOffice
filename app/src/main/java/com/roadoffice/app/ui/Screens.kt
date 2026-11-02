@@ -166,8 +166,9 @@ internal fun dayRange(): Pair<Long, Long> {
     return from to c.timeInMillis
 }
 
-internal fun monthRange(): Pair<Long, Long> {
-    val c = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+/** offset 0 = 이번 달, -1 = 지난달 */
+internal fun monthRange(offset: Int = 0): Pair<Long, Long> {
+    val c = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0); add(Calendar.MONTH, offset) }
     val from = c.timeInMillis
     c.add(Calendar.MONTH, 1)
     return from to c.timeInMillis
@@ -235,7 +236,9 @@ internal fun TripRow(t: TripEntity, guest: Boolean = false, onPurpose: (Purpose)
 
 @Composable
 private fun WorkMileTab(graph: AppGraph) {
-    val (from, to) = remember { monthRange() }
+    // 월 정산은 보통 다음 달 초에 한다 — 첫 주에는 지난달이 기본
+    var offset by remember { mutableStateOf(if (Calendar.getInstance().get(Calendar.DAY_OF_MONTH) <= 7) -1 else 0) }
+    val (from, to) = remember(offset) { monthRange(offset) }
     val trips by graph.db.trips().observeBetween(from, to).collectAsState(initial = emptyList())
     val refills by graph.db.refills().observeBetween(from, to).collectAsState(initial = emptyList())
     var rate by remember { mutableStateOf(graph.perKmRate.toString()) }
@@ -247,7 +250,12 @@ private fun WorkMileTab(graph: AppGraph) {
         mode,
         refills.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.amount ?: 0L },
     )
-    Text("이번 달 워크마일", color = Active, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("${SimpleDateFormat("M월", Locale.KOREA).format(Date(from))} 워크마일", color = Active, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(20.dp))
+        Chip("지난달", offset == -1) { offset = -1 }
+        Chip("이번 달", offset == 0) { offset = 0 }
+    }
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Stat("업무 거리", "%.1f km".format(s.businessKm))
@@ -280,7 +288,7 @@ private fun WorkMileTab(graph: AppGraph) {
     )
     if (refills.isNotEmpty()) {
         Spacer(Modifier.height(12.dp))
-        Text("이번 달 주유·충전 ${refills.size}건", color = Active, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("주유·충전 ${refills.size}건", color = Active, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         refills.take(3).forEach { r -> RefillRow(graph, r) }
     }
     Spacer(Modifier.height(20.dp))
@@ -305,7 +313,7 @@ private fun WorkMileTab(graph: AppGraph) {
         Button(
             onClick = { scope.launch { result = graph.exportMonth(from, to).files.joinToString("\n") { "· " + it.name } } },
             colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue),
-        ) { Text("이번 달 정산 내보내기", fontSize = 24.sp) }
+        ) { Text("정산 파일 내보내기", fontSize = 24.sp) }
     }
     result?.let {
         Spacer(Modifier.height(10.dp))

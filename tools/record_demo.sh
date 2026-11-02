@@ -47,7 +47,7 @@ $ADB shell "am broadcast -a ADD_MEETING_NOTE -n com.roadoffice.app/.gleo.GleoRec
 sleep 12; tap "상담 일지"; sleep 8
 
 say "6. 월말 — 워크마일 정산 내보내기"
-tap "워크마일"; sleep 3; tap "이번 달 정산 내보내기"; sleep 7
+tap "워크마일"; sleep 3; tap "정산 파일 내보내기"; sleep 7
 
 say "녹화 종료"
 $ADB shell pkill -INT screenrecord || true
