@@ -97,7 +97,7 @@ class DemoSeedReceiver : BroadcastReceiver() {
                 )
                 odo += km
                 if (purpose == Purpose.BUSINESS && rnd.nextInt(3) == 0) {
-                    note(clients[name]?.id, name, tripId, end + 50 * 60_000L, talks[rnd.nextInt(talks.size)], day.get(Calendar.DAY_OF_MONTH) < today - 4)
+                    note(clients[name]?.id, name, tripId, end + 50 * 60_000L, talks[(day.get(Calendar.DAY_OF_MONTH) + i) % talks.size] /* rnd 를 쓰지 않아야 운행·정산 숫자가 바뀌지 않는다 */, day.get(Calendar.DAY_OF_MONTH) < today - 4)
                 }
                 if (purpose == Purpose.BUSINESS && charges < 4 && day.get(Calendar.DAY_OF_MONTH) % 7 == 3 && i == 0) {
                     charges++
