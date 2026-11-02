@@ -119,3 +119,30 @@ class DemoTalkTest {
         org.junit.Assert.assertNotNull(r.followUpAt)
     }
 }
+
+class NoteFixes1102Test {
+    // 2026-11-04(수) 15:00
+    private val now = java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.NOVEMBER, 4, 15, 0, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+    private fun day(m: Int, d: Int) = java.util.Calendar.getInstance().apply { set(2026, m, d, 0, 0, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+
+    @Test
+    fun `갖다 드리기로 같은 말을 자르지 않는다`() = kotlinx.coroutines.runBlocking {
+        val r = RuleNoteAssistant().structure("실장님이 샘플을 원하셔서 내일 샘플 갖다 드리기로 했어요", "미래약국", now)
+        org.junit.Assert.assertEquals(1, r.tasks.size)
+        org.junit.Assert.assertTrue(r.tasks[0], r.tasks[0].endsWith("샘플 갖다 드리기")) // "갖다"에서 잘리지 않음
+    }
+
+    @Test
+    fun `담주와 다다음 주`() {
+        val a = RuleNoteAssistant()
+        org.junit.Assert.assertEquals(day(java.util.Calendar.NOVEMBER, 12), a.findDate("담주 목요일에 다시 뵙기로", now))
+        org.junit.Assert.assertEquals(day(java.util.Calendar.NOVEMBER, 17), a.findDate("다다음 주 화요일에 미팅", now))
+        org.junit.Assert.assertEquals(day(java.util.Calendar.NOVEMBER, 10), a.findDate("다음 주 화요일에 미팅", now))
+    }
+
+    @Test
+    fun `날짜 말을 지운 뒤 공백이 겹치지 않는다`() {
+        val t = RuleNoteAssistant().tidyTask("저는 오늘 중으로 행사 상품 목록 보내 드리기로 했어요", now)
+        org.junit.Assert.assertEquals("저는 행사 상품 목록 보내기", t)
+    }
+}
