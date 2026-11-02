@@ -453,9 +453,15 @@ private fun SignalsTab(graph: AppGraph) {
         Stat("위치", loc?.let { "%.3f, %.3f".format(it.lat, it.lon) } ?: "—")
     }
     Spacer(Modifier.height(12.dp))
-    Button(onClick = { graph.signals.requestRoute("현대차 강남대로사옥", "서울 강남구 강남대로 350", LatLng(37.4959, 127.0293)) }) {
-        Text("시험 경로 시작", fontSize = 22.sp)
+    var showLicense by remember { mutableStateOf(false) }
+    Row {
+        Button(onClick = { graph.signals.requestRoute("현대차 강남대로사옥", "서울 강남구 강남대로 350", LatLng(37.4959, 127.0293)) }) {
+            Text("시험 경로 시작", fontSize = 22.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        OutlinedButton(onClick = { showLicense = true }, modifier = Modifier.height(56.dp)) { Text("오픈소스 라이선스", fontSize = 22.sp, color = Color.White) }
     }
+    if (showLicense) LicenseDialog { showLicense = false }
     LazyColumn { items(logs) { Text(it, color = Color.White, fontSize = 20.sp, modifier = Modifier.padding(vertical = 3.dp)) } }
 }
 
@@ -493,4 +499,19 @@ private fun TermsEditor(graph: AppGraph) {
     if (terms.isNotEmpty()) Row(Modifier.padding(top = 8.dp)) {
         terms.take(8).forEach { t -> Chip("$t ✕", false) { terms = terms - t; graph.terms = terms } }
     }
+}
+
+/** 오픈소스 라이선스 고지 (SQLCipher 등 고지 의무) — assets/licenses/NOTICE.txt */
+@Composable
+private fun LicenseDialog(onClose: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val text = remember { runCatching { ctx.assets.open("licenses/NOTICE.txt").bufferedReader().readText() }.getOrDefault("라이선스 파일을 열 수 없습니다.") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("오픈소스 라이선스", fontSize = 28.sp) },
+        text = {
+            LazyColumn(Modifier.height(520.dp)) { item { Text(text, fontSize = 18.sp) } }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onClose) { Text("닫기", fontSize = 22.sp) } },
+    )
 }

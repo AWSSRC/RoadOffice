@@ -63,6 +63,12 @@ android {
 }
 
 dependencies {
+    // 보안: Pleos LLM SDK → retrofit 2.9.0 이 끌어오는 옛 버전의 알려진 취약점 대체 (OSV 점검 2026-11-02)
+    //  okhttp 3.14.9: CVE-2021-0341 (잘못된 인증서 허용, 4.9.2 에서 수정) / okio 1.17.2: CVE-2023-3635 (1.17.6·3.4.0 에서 수정)
+    constraints {
+        implementation("com.squareup.okhttp3:okhttp:4.12.0") { because("CVE-2021-0341") }
+        implementation("com.squareup.okio:okio:3.9.1") { because("CVE-2023-3635") }
+    }
     implementation("ai.pleos.playground:Vehicle:2.3.2")
     implementation("ai.pleos.playground:NaviHelper:3.0.5")
     implementation("ai.pleos.playground:FusedLocation:1.1.3")
