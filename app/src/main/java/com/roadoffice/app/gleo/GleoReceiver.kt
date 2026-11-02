@@ -42,7 +42,7 @@ class GleoReceiver : BroadcastReceiver() {
                     }
                     ADD_MEETING_NOTE -> {
                         val note = params.optString("note").take(MAX_TEXT)
-                        if (note.isBlank()) respond(context, action, "asking", "What should be saved in the meeting note?")
+                        if (note.isBlank()) respond(context, action, "asking", "상담 일지에 어떤 내용을 남길까요?")
                         else {
                             // Gleo 는 7초 뒤 타임아웃 — 원문 접수를 먼저 응답하고 정리(AI)는 뒤에서 이어간다
                             graph.addNote(note, params.optString("clientName").take(80).ifBlank { null }, fromVoice = true)
