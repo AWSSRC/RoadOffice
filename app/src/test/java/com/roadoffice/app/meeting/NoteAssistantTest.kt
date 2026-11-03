@@ -37,8 +37,8 @@ class NoteAssistantTest {
 
     @Test
     fun `브리핑 문장 - 첫 방문과 재방문`() {
-        assertTrue(Briefing.text("서울아산병원", null, emptyList(), 0).contains("첫 방문"))
-        val t = Briefing.text("서울아산병원", "견적 검토 중", listOf("카탈로그 보내기"), 2)
+        assertTrue(Briefing.text("서울아산병원", null, emptyList()).contains("첫 방문"))
+        val t = Briefing.text("서울아산병원", "견적 검토 중", listOf("카탈로그 보내기"))
         assertTrue(t.contains("지난번, 견적 검토 중"))
         assertTrue(t.contains("남은 할 일 1개, 카탈로그 보내기"))
         assertNotNull(t)

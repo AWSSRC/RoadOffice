@@ -362,7 +362,7 @@ class AppGraph(private val context: Context) {
         if (!force && !briefedThisTrip.add(c.id)) return ""
         val notes = db.notes().forClient(c.id)
         val open = notes.filter { !it.tasksDone }.flatMap { it.tasks.lines() }.filter { it.isNotBlank() }
-        val text = Briefing.text(c.name, notes.firstOrNull()?.summary, open, db.trips().visits(c.id), arriving = !force)
+        val text = Briefing.text(c.name, notes.firstOrNull()?.summary, open, arriving = !force)
         voice.speak(text)
         val line = Briefing.short(c.name, open)
         _lastBrief.value = line

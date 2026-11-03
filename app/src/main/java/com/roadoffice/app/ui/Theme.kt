@@ -8,7 +8,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -40,7 +39,6 @@ data class RoColors(
     val strong: Color,      // 선택된 탭·칩 바탕 (surface accent)
     val ink: Color,         // 글자 100%
     val sub: Color,         // 글자 64%
-    val faint: Color,       // 글자 32%
     val accent: Color,      // 주 버튼 (화면당 하나)
     val onAccent: Color,
     val accentText: Color,  // 강조 글자·아이콘
@@ -58,7 +56,7 @@ private val Ink100 = Color(0xFF131417)
 val LightRo = RoColors(
     dark = false,
     bg = Color(0xFFF7F8FA), surface = Color.White, field = Color(0xFFEDEEF2), strong = Ink100,
-    ink = Ink100, sub = Ink100.copy(alpha = 0.64f), faint = Ink100.copy(alpha = 0.32f),
+    ink = Ink100, sub = Ink100.copy(alpha = 0.64f),
     accent = PleosBlue, onAccent = Color.White, accentText = PleosBlue,
     warn = Color(0xFFFFEBD9), onWarn = Color(0xFFB54708), warnText = Color(0xFFC4500A),
     banner = Color(0xFFE9EDFF), line = Color(0xFFE0E1E6), rail = Color.White,
@@ -67,7 +65,7 @@ val LightRo = RoColors(
 val DarkRo = RoColors(
     dark = true,
     bg = Color(0xFF131417), surface = Color(0xFF1D1E21), field = Color(0xFF313236), strong = Color.White,
-    ink = Color.White, sub = Color.White.copy(alpha = 0.64f), faint = Color.White.copy(alpha = 0.32f),
+    ink = Color.White, sub = Color.White.copy(alpha = 0.64f),
     accent = Color(0xFF4D6BFF), onAccent = Color.White, accentText = Color(0xFF8FA2FF),
     warn = Color(0xFF3A2A12), onWarn = Color(0xFFFFB547), warnText = Color(0xFFFFB547),
     banner = Color(0xFF1E2550), line = Color(0xFF313236), rail = Color(0xFF1D1E21),
@@ -83,7 +81,6 @@ internal val Strong: Color @Composable get() = LocalRo.current.strong
 internal val OnStrong: Color @Composable get() = LocalRo.current.bg
 internal val Ink: Color @Composable get() = LocalRo.current.ink
 internal val Sub: Color @Composable get() = LocalRo.current.sub
-internal val Faint: Color @Composable get() = LocalRo.current.faint
 internal val Active: Color @Composable get() = LocalRo.current.accent
 internal val OnAccent: Color @Composable get() = LocalRo.current.onAccent
 internal val AccentText: Color @Composable get() = LocalRo.current.accentText
@@ -91,7 +88,6 @@ internal val Warn: Color @Composable get() = LocalRo.current.warn
 internal val OnWarn: Color @Composable get() = LocalRo.current.onWarn
 internal val WarnText: Color @Composable get() = LocalRo.current.warnText
 internal val Banner: Color @Composable get() = LocalRo.current.banner
-internal val Line: Color @Composable get() = LocalRo.current.line
 internal val Rail: Color @Composable get() = LocalRo.current.rail
 
 /** Pleos 기본 글꼴 Asta Sans (42dot, OFL) — 가변 글꼴 하나로 굵기 300~800. */
@@ -142,6 +138,6 @@ fun Modifier.roCard(radius: Int = 28): Modifier = composed {
 
 /** 보조 버튼 — 회색 알약형. 주 버튼(강조색)은 화면당 하나만. */
 @Composable
-fun SoftButton(onClick: () -> Unit, modifier: Modifier = Modifier, shape: Shape = CircleShape, content: @Composable RowScope.() -> Unit) =
+fun SoftButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) =
     Button(onClick = onClick, modifier = modifier, shape = CircleShape,
         colors = ButtonDefaults.buttonColors(containerColor = Field, contentColor = Ink), content = content)

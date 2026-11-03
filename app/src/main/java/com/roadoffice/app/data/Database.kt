@@ -149,11 +149,6 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE startAt >= :from AND startAt < :to ORDER BY startAt")
     suspend fun between(from: Long, to: Long): List<TripEntity>
 
-    @Query("SELECT COUNT(*) FROM trips WHERE clientId = :clientId")
-    suspend fun visits(clientId: Long): Int
-
-    @Query("DELETE FROM trips")
-    suspend fun deleteAll()
 }
 
 @Dao

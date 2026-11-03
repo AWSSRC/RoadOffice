@@ -124,7 +124,7 @@ object Briefing {
     fun short(clientName: String, openTasks: List<String>): String =
         "$clientName · " + if (openTasks.isEmpty()) "남은 할 일 없음" else "할 일 ${openTasks.size}: ${openTasks.first()}"
 
-    fun text(clientName: String, lastSummary: String?, openTasks: List<String>, visits: Int, arriving: Boolean = true): String = buildString {
+    fun text(clientName: String, lastSummary: String?, openTasks: List<String>, arriving: Boolean = true): String = buildString {
         // 주행 중에 듣는 말 — 두 문장 안쪽으로 짧게 (방문 횟수 등 부가 정보는 화면으로)
         append(if (arriving) "곧 ${clientName}입니다. " else "$clientName 브리핑입니다. ")
         if (lastSummary == null) {
