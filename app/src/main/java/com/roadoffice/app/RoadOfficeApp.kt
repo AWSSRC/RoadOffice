@@ -130,6 +130,10 @@ class AppGraph(private val context: Context) {
     private val _privacy = MutableStateFlow(settings.getBoolean("privacy_on", true))
     /** 동승자 보호 (기본 켬) */
     val privacy: StateFlow<Boolean> = _privacy
+    /** 화면 색: AUTO = 차량 주·야간 모드(시스템 야간 모드)를 따름. 시연·점검용으로 고정할 수 있다. */
+    private val _themeMode = MutableStateFlow(settings.getString("theme_mode", "AUTO")!!)
+    val themeMode: StateFlow<String> = _themeMode
+    fun setThemeMode(m: String) { _themeMode.value = m; settings.edit().putString("theme_mode", m).apply() }
     fun setPrivacy(on: Boolean) { _privacy.value = on; settings.edit().putBoolean("privacy_on", on).apply() }
     /** 이 시각 이후 운행이 끝나면 하루 마감을 권한다 */
     var dayEndHour: Int

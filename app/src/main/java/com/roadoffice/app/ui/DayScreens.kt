@@ -45,7 +45,6 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
 
-private val BannerBlue = Color(0xFF00597A)
 private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
 private val mdhm = SimpleDateFormat("M/d HH:mm", Locale.KOREA)
 
@@ -61,12 +60,12 @@ internal fun rememberGuest(graph: AppGraph): Boolean {
 internal fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
     Text(
         label,
-        color = if (on) HyundaiBlue else Color.White,
+        color = if (on) OnAccent else Ink,
         fontSize = 22.sp,
         modifier = Modifier
             .padding(end = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(if (on) Active else HyundaiBlue) // 카드 위에서도 버튼으로 보이게
+            .background(if (on) Active else Field) // 카드 위에서도 버튼으로 보이게
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp), // 터치 높이 약 64dp
     )
@@ -93,12 +92,12 @@ internal fun PrivacyChip(graph: AppGraph) {
     )
     Text(
         text,
-        color = if (privacy && cabin.guestOnBoard) HyundaiBlue else Color.White,
+        color = if (privacy && cabin.guestOnBoard) OnWarn else Ink,
         fontSize = 22.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (privacy && cabin.guestOnBoard) Warn else Card)
+            .background(if (privacy && cabin.guestOnBoard) Warn else Field)
             .clickable { if (privacy) confirmOff = true else graph.setPrivacy(true) }
             .padding(horizontal = 18.dp, vertical = 10.dp),
     )
@@ -113,17 +112,17 @@ internal fun PrivacyGate(graph: AppGraph, what: String): Boolean {
     LaunchedEffect(revealed) { if (revealed) { delay(30_000); revealed = false } } // "잠깐" 보기 — 30초 뒤 다시 가림
     if (!guest) return true
     if (revealed) {
-        Text("동승자 탑승 중 · 30초 뒤 다시 가려요", color = HyundaiBlue, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+        Text("동승자 탑승 중 · 30초 뒤 다시 가려요", color = OnWarn, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Warn).padding(horizontal = 16.dp, vertical = 6.dp))
         Spacer(Modifier.height(8.dp))
         return true
     }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Card).padding(32.dp)) {
-        Text("동승자가 있어 $what 화면을 가렸어요", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+    Column(Modifier.fillMaxWidth().roCard().padding(32.dp)) {
+        Text("동승자가 있어 $what 화면을 가렸어요", color = Ink, fontSize = 30.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Text("좌석 센서로 옆·뒷자리 탑승을 확인했어요. 고객 정보가 다른 고객에게 보이지 않도록 브리핑·상담 내용은 소리로도 읽지 않아요.", color = Sub, fontSize = 22.sp)
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { revealed = true }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue)) { Text("잠깐 보기", fontSize = 22.sp) }
+        Button(onClick = { revealed = true }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent)) { Text("잠깐 보기", fontSize = 22.sp) }
     }
     return false
 }
@@ -140,7 +139,7 @@ private fun AmountEditor(graph: AppGraph, r: RefillEntity) {
         modifier = Modifier.width(200.dp),
     )
     Spacer(Modifier.width(8.dp))
-    Button(onClick = { graph.setRefillAmount(r.id, text.toLongOrNull()) }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue), modifier = Modifier.height(64.dp)) {
+    Button(onClick = { graph.setRefillAmount(r.id, text.toLongOrNull()) }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent), modifier = Modifier.height(64.dp)) {
         Text("저장", fontSize = 22.sp)
     }
 }
@@ -151,15 +150,15 @@ private fun RefillEntity.verb() = if (kind == EnergyKind.EV_CHARGE.name) "충전
 @Composable
 internal fun RefillRow(graph: AppGraph, r: RefillEntity) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).background(Card).padding(14.dp),
+        Modifier.fillMaxWidth().padding(top = 8.dp).roCard().padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("${mdhm.format(Date(r.startedAt))}  ·  ${r.title()}", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("${mdhm.format(Date(r.startedAt))}  ·  ${r.title()}", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             val guest = rememberGuest(graph)
             Row {
                 Text((if (guest && r.place != null) "업무 방문지" else r.place ?: "장소 미상") + "  ·  ", color = Sub, fontSize = 20.sp)
-                Text(r.amount?.let { won(it) } ?: "금액 미입력", color = if (r.amount == null) Warn else Sub, fontSize = 20.sp)
+                Text(r.amount?.let { won(it) } ?: "금액 미입력", color = if (r.amount == null) WarnText else Sub, fontSize = 20.sp)
             }
         }
         listOf(Purpose.BUSINESS, Purpose.PERSONAL).forEach { p -> Chip(p.label(), r.purpose == p.name) { graph.setRefillPurpose(r.id, p) } }
@@ -186,18 +185,18 @@ internal fun RefillBanner(graph: AppGraph, collapsed: Boolean) {
         return
     }
     Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).background(BannerBlue).padding(16.dp),
+        Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).background(Banner).padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("${r.title()} ${r.verb()}했어요", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("${r.title()} ${r.verb()}했어요", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Text("${hm.format(Date(r.startedAt))} · 업무용이면 금액을 넣어 주세요 (실비 정산)", color = Sub, fontSize = 20.sp)
         }
         listOf(Purpose.BUSINESS, Purpose.PERSONAL).forEach { p -> Chip(p.label(), r.purpose == p.name) { graph.setRefillPurpose(r.id, p) } }
         Spacer(Modifier.width(8.dp))
         AmountEditor(graph, r)
         Spacer(Modifier.width(8.dp))
-        OutlinedButton(onClick = { hidden = hidden + r.id }, modifier = Modifier.height(64.dp)) { Text("나중에", fontSize = 22.sp, color = Color.White) }
+        OutlinedButton(onClick = { hidden = hidden + r.id }, modifier = Modifier.height(64.dp)) { Text("나중에", fontSize = 22.sp, color = Ink) }
     }
 }
 
@@ -222,18 +221,18 @@ internal fun DayClosePanel(graph: AppGraph) {
 
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { graph.cancelDayClose() }, modifier = Modifier.height(64.dp)) { Text("← 돌아가기", fontSize = 22.sp, color = Color.White) }
+            OutlinedButton(onClick = { graph.cancelDayClose() }, modifier = Modifier.height(64.dp)) { Text("← 돌아가기", fontSize = 22.sp, color = Ink) }
             Spacer(Modifier.width(20.dp))
-            Text("오늘 마감 30초", color = Active, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+            Text("오늘 마감 30초", color = AccentText, fontSize = 34.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(20.dp))
             Text("차에서 내리기 전에 오늘 정리를 끝내요", color = Sub, fontSize = 22.sp, modifier = Modifier.weight(1f))
             PrivacyChip(graph)
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Stat("오늘 운행", "${trips.size}건")
-            Stat("업무 거리", "%.1f km".format(trips.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.distanceKm }))
-            Stat("남은 정리", if (left == 0) "없음" else "${left}건", if (left > 0) Warn else Active)
+            Stat("오늘 운행", "${trips.size}건", modifier = Modifier.weight(1f))
+            Stat("업무 거리", "%.1f km".format(trips.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.distanceKm }), modifier = Modifier.weight(1f))
+            Stat("남은 정리", if (left == 0) "없음" else "${left}건", if (left > 0) WarnText else AccentText, modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -249,9 +248,9 @@ internal fun DayClosePanel(graph: AppGraph) {
                 item { Section("남은 할 일 — 끝낸 건 눌러서 체크") }
                 if (guest) item { Text("할 일 ${openCount}개 · 동승자 탑승 중이라 내용은 가렸어요", color = Sub, fontSize = 22.sp) }
                 else items(open, key = { "n${it.id}" }) { n ->
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).clickable { graph.setTasksDone(n.id, true) }.padding(14.dp)) {
-                        Text(n.clientName ?: "거래처 미지정", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        n.tasks.lines().filter { it.isNotBlank() }.forEach { Text("☐ $it", color = Warn, fontSize = 22.sp) }
+                    Column(Modifier.fillMaxWidth().roCard().clickable { graph.setTasksDone(n.id, true) }.padding(14.dp)) {
+                        Text(n.clientName ?: "거래처 미지정", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        n.tasks.lines().filter { it.isNotBlank() }.forEach { Text("☐ $it", color = WarnText, fontSize = 22.sp) }
                     }
                 }
             }
@@ -260,7 +259,7 @@ internal fun DayClosePanel(graph: AppGraph) {
                 item {
                     Text(
                         if (guest) "${tomorrow.size}건 · 동승자 탑승 중이라 거래처명은 가렸어요" else tomorrow.mapNotNull { it.clientName }.distinct().joinToString("  ·  "),
-                        color = Color.White, fontSize = 24.sp,
+                        color = Ink, fontSize = 24.sp,
                     )
                 }
             }
@@ -269,7 +268,7 @@ internal fun DayClosePanel(graph: AppGraph) {
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = { graph.finishDayClose() },
-            colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = HyundaiBlue),
+            colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent),
             modifier = Modifier.fillMaxWidth().height(72.dp),
         ) { Text(if (left == 0) "마감 완료" else "이대로 마감 (남은 ${left}건은 내일 마감 때 다시 보여요)", fontSize = 26.sp, fontWeight = FontWeight.Bold) }
     }
@@ -277,5 +276,5 @@ internal fun DayClosePanel(graph: AppGraph) {
 
 @Composable
 private fun Section(title: String) {
-    Text(title, color = Active, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+    Text(title, color = AccentText, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
 }
