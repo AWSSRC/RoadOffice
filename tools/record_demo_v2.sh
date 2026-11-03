@@ -32,7 +32,7 @@ $ADB shell am start -n com.roadoffice.app/.MainActivity >/dev/null; sleep 12
 # 거래처(한빛병원)를 현재 위치로 등록하려면 앱이 위치를 받은 뒤여야 한다 — 에뮬레이터 재부팅 직후엔 늦게 온다
 for k in 1 2 3 4 5 6 7 8; do geo $LAT $LON; sleep 3; tools/ui.sh tap "신호" >/dev/null; sleep 1; tools/ui.sh texts | grep -q "37.496" && break; done
 tools/ui.sh tap "오늘 운행" >/dev/null
-$ADB shell am broadcast -a com.roadoffice.app.DEMO_SEED -n com.roadoffice.app/.demo.DemoSeedReceiver --ez month true >/dev/null; sleep 4
+$ADB shell am broadcast -a com.roadoffice.app.DEMO_SEED -n com.roadoffice.app/.demo.DemoSeedReceiver --ez month true --ei day_end_hour 23 >/dev/null; sleep 4
 tap "워크마일"; sleep 1; tap "실비"; sleep 1; tap "오늘 운행"; sleep 1
 geo 37.4500 $LON; sleep 2
 O=$(( $(odo) + 1 )); put "odometer?traveled_distance_km=$O"; sleep 2

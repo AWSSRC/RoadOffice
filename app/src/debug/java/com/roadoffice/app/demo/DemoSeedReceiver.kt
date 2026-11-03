@@ -25,6 +25,8 @@ class DemoSeedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val g = context.graph
         val month = intent.getBooleanExtra("month", false)
+        // 녹화 시각이 퇴근 시각을 넘으면 주차 때 하루 마감이 저절로 열려 장면이 멈춘다 — 시연에선 마감 시각을 고정
+        intent.getIntExtra("day_end_hour", -1).takeIf { it in 0..23 }?.let { context.graph.dayEndHour = it }
         val pending = goAsync()
         g.launch {
             try {
