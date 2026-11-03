@@ -1,9 +1,22 @@
 package com.roadoffice.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import com.roadoffice.app.R
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
@@ -15,46 +28,49 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 
 /**
- * 로드오피스 색 체계 — 낮에는 Pleos 시스템 UI 와 같은 라이트 톤, 밤에는 눈부심을 줄이는 현대 블루 다크.
- * 차량 주·야간(시스템 야간 모드)을 따라 자동으로 바뀐다.
+ * 로드오피스 디자인 토큰 — Pleos Connect 디자인 가이드(document.pleos.ai, foundations/colors·typography) 기준.
+ * 테두리 대신 면 밝기 3단계(bg → surface → field)로 위계를 만들고, 강조색(Pleos Blue)은 화면당 주 버튼 하나에만 쓴다.
+ * 낮엔 라이트, 밤엔 다크 — 차량 주·야간(시스템 야간 모드)을 따른다.
  */
 data class RoColors(
     val dark: Boolean,
     val bg: Color,          // 화면 바탕
     val surface: Color,     // 카드
-    val field: Color,       // 카드 안 칩·입력 바탕
-    val ink: Color,         // 본문 글자
-    val sub: Color,         // 보조 글자
-    val accent: Color,      // 주 버튼·선택 상태 바탕
-    val onAccent: Color,    // 주 버튼 위 글자
-    val accentText: Color,  // 강조 글자 (제목·수치)
-    val warn: Color,        // 주의 배지 바탕
-    val onWarn: Color,
-    val warnText: Color,    // 주의 글자 (남은 할 일 등)
-    val banner: Color,      // "미팅 어땠어요?" 같은 알림 카드
+    val field: Color,       // 카드 안 칩·보조 버튼 (surface high)
+    val strong: Color,      // 선택된 탭·칩 바탕 (surface accent)
+    val ink: Color,         // 글자 100%
+    val sub: Color,         // 글자 64%
+    val faint: Color,       // 글자 32%
+    val accent: Color,      // 주 버튼 (화면당 하나)
+    val onAccent: Color,
+    val accentText: Color,  // 강조 글자·아이콘
+    val warn: Color,        // 주의 배지 바탕 (옅은 면)
+    val onWarn: Color,      // 주의 배지 글자
+    val warnText: Color,
+    val banner: Color,      // 알림 카드 (강조색을 옅게 깐 면)
     val line: Color,
-    val rail: Color,        // 왼쪽 메뉴 바탕
+    val rail: Color,
 )
 
-private val HyundaiNavy = Color(0xFF002C5F)
-private val ActiveBlue = Color(0xFF00AAD2)
+private val PleosBlue = Color(0xFF2146FF)
+private val Ink100 = Color(0xFF131417)
 
 val LightRo = RoColors(
     dark = false,
-    bg = Color(0xFFF2F4F7), surface = Color.White, field = Color(0xFFE9EEF4),
-    ink = Color(0xFF0E1A2B), sub = Color(0xFF5A6676),
-    accent = HyundaiNavy, onAccent = Color.White, accentText = Color(0xFF0067A0),
-    warn = Color(0xFFFFB81C), onWarn = Color(0xFF2A1C00), warnText = Color(0xFFA55A00),
-    banner = Color(0xFFE2F3F9), line = Color(0xFFDCE2EA), rail = Color.White,
+    bg = Color(0xFFF7F8FA), surface = Color.White, field = Color(0xFFEDEEF2), strong = Ink100,
+    ink = Ink100, sub = Ink100.copy(alpha = 0.64f), faint = Ink100.copy(alpha = 0.32f),
+    accent = PleosBlue, onAccent = Color.White, accentText = PleosBlue,
+    warn = Color(0xFFFFEBD9), onWarn = Color(0xFFB54708), warnText = Color(0xFFC4500A),
+    banner = Color(0xFFE9EDFF), line = Color(0xFFE0E1E6), rail = Color.White,
 )
 
 val DarkRo = RoColors(
     dark = true,
-    bg = Color(0xFF00224A), surface = Color(0xFF0A3D7A), field = Color(0xFF002C5F),
-    ink = Color.White, sub = Color(0xFFA9BCD6),
-    accent = ActiveBlue, onAccent = HyundaiNavy, accentText = ActiveBlue,
-    warn = Color(0xFFF2A900), onWarn = HyundaiNavy, warnText = Color(0xFFF2A900),
-    banner = Color(0xFF00597A), line = Color(0xFF1B4F8A), rail = Color(0xFF001A3A),
+    bg = Color(0xFF131417), surface = Color(0xFF1D1E21), field = Color(0xFF313236), strong = Color.White,
+    ink = Color.White, sub = Color.White.copy(alpha = 0.64f), faint = Color.White.copy(alpha = 0.32f),
+    accent = Color(0xFF4D6BFF), onAccent = Color.White, accentText = Color(0xFF8FA2FF),
+    warn = Color(0xFF3A2A12), onWarn = Color(0xFFFFB547), warnText = Color(0xFFFFB547),
+    banner = Color(0xFF1E2550), line = Color(0xFF313236), rail = Color(0xFF1D1E21),
 )
 
 val LocalRo = staticCompositionLocalOf { LightRo }
@@ -63,8 +79,11 @@ val LocalRo = staticCompositionLocalOf { LightRo }
 internal val Bg: Color @Composable get() = LocalRo.current.bg
 internal val Card: Color @Composable get() = LocalRo.current.surface
 internal val Field: Color @Composable get() = LocalRo.current.field
+internal val Strong: Color @Composable get() = LocalRo.current.strong
+internal val OnStrong: Color @Composable get() = LocalRo.current.bg
 internal val Ink: Color @Composable get() = LocalRo.current.ink
 internal val Sub: Color @Composable get() = LocalRo.current.sub
+internal val Faint: Color @Composable get() = LocalRo.current.faint
 internal val Active: Color @Composable get() = LocalRo.current.accent
 internal val OnAccent: Color @Composable get() = LocalRo.current.onAccent
 internal val AccentText: Color @Composable get() = LocalRo.current.accentText
@@ -74,6 +93,27 @@ internal val WarnText: Color @Composable get() = LocalRo.current.warnText
 internal val Banner: Color @Composable get() = LocalRo.current.banner
 internal val Line: Color @Composable get() = LocalRo.current.line
 internal val Rail: Color @Composable get() = LocalRo.current.rail
+
+/** Pleos 기본 글꼴 Asta Sans (42dot, OFL) — 가변 글꼴 하나로 굵기 300~800. */
+@OptIn(ExperimentalTextApi::class)
+private fun asta(w: Int) = Font(R.font.asta_sans, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
+val AstaSans = FontFamily(asta(400), asta(500), asta(600), asta(700), asta(800))
+
+/** Material 기본 글자 스타일 전부에 Asta Sans 를 입힌다. */
+fun roTypography(): Typography {
+    val t = Typography()
+    fun TextStyle.a() = copy(fontFamily = AstaSans)
+    return Typography(
+        displayLarge = t.displayLarge.a(), displayMedium = t.displayMedium.a(), displaySmall = t.displaySmall.a(),
+        headlineLarge = t.headlineLarge.a(), headlineMedium = t.headlineMedium.a(), headlineSmall = t.headlineSmall.a(),
+        titleLarge = t.titleLarge.a(), titleMedium = t.titleMedium.a(), titleSmall = t.titleSmall.a(),
+        bodyLarge = t.bodyLarge.a().copy(fontSize = 24.sp), bodyMedium = t.bodyMedium.a(), bodySmall = t.bodySmall.a().copy(fontSize = 18.sp),
+        labelLarge = t.labelLarge.a(), labelMedium = t.labelMedium.a(), labelSmall = t.labelSmall.a(),
+    )
+}
+
+/** 숫자는 고정폭(표 숫자)으로 — 거리·금액이 바뀌어도 자리가 흔들리지 않게. */
+val Tnum = TextStyle(fontFeatureSettings = "tnum")
 
 /** Material 기본 아이콘 경로 (아이콘 확장 라이브러리 없이 필요한 것만). */
 private fun icon(name: String, d: String) = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
@@ -94,9 +134,14 @@ object RoIcons {
     val Calendar = icon("cal", "M19,4h-1V2h-2v2H8V2H6v2H5c-1.11,0 -1.99,0.9 -1.99,2L3,20c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2zM19,20H5V9h14v11z")
 }
 
-/** 카드 바탕 — 라이트에선 얇은 테두리로 바탕과 구분. */
-fun Modifier.roCard(radius: Int = 20): Modifier = composed {
+/** 카드 바탕 — 테두리 없이 면 밝기로만 구분 (Pleos 방식). */
+fun Modifier.roCard(radius: Int = 28): Modifier = composed {
     val ro = LocalRo.current
-    val shape = RoundedCornerShape(radius.dp)
-    clip(shape).background(ro.surface).then(if (ro.dark) Modifier else Modifier.border(1.dp, ro.line, shape))
+    clip(RoundedCornerShape(radius.dp)).background(ro.surface)
 }
+
+/** 보조 버튼 — 회색 알약형. 주 버튼(강조색)은 화면당 하나만. */
+@Composable
+fun SoftButton(onClick: () -> Unit, modifier: Modifier = Modifier, shape: Shape = CircleShape, content: @Composable RowScope.() -> Unit) =
+    Button(onClick = onClick, modifier = modifier, shape = CircleShape,
+        colors = ButtonDefaults.buttonColors(containerColor = Field, contentColor = Ink), content = content)

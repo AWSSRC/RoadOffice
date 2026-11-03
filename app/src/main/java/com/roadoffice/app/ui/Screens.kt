@@ -1,6 +1,7 @@
 package com.roadoffice.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
@@ -27,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -78,13 +78,13 @@ fun RoadOfficeScreen(graph: AppGraph) {
     val ro = if (dark) DarkRo else LightRo
     val scheme = if (dark) darkColorScheme(
         primary = ro.accent, onPrimary = ro.onAccent, surface = ro.surface, onSurface = ro.ink, surfaceContainerHigh = ro.surface,
-        onSurfaceVariant = ro.sub, outline = ro.sub, background = ro.bg, onBackground = ro.ink,
+        onSurfaceVariant = ro.sub, outline = ro.line, background = ro.bg, onBackground = ro.ink,
     ) else lightColorScheme(
         primary = ro.accent, onPrimary = ro.onAccent, surface = ro.surface, onSurface = ro.ink, surfaceContainerHigh = ro.surface,
-        onSurfaceVariant = ro.sub, outline = ro.sub, background = ro.bg, onBackground = ro.ink,
+        onSurfaceVariant = ro.sub, outline = ro.line, background = ro.bg, onBackground = ro.ink,
     )
     CompositionLocalProvider(LocalRo provides ro) {
-        MaterialTheme(colorScheme = scheme, typography = Typography(bodyLarge = TextStyle(fontSize = 24.sp), bodySmall = TextStyle(fontSize = 18.sp))) {
+        MaterialTheme(colorScheme = scheme, typography = roTypography(), shapes = androidx.compose.material3.Shapes(extraSmall = RoundedCornerShape(18.dp))) {
             Box(Modifier.fillMaxSize().background(ro.bg)) {
                 if (driving) DrivingView(graph) else ParkedView(graph)
             }
@@ -103,7 +103,7 @@ private fun DrivingView(graph: AppGraph) {
     val debrief by graph.pendingDebrief.collectAsState()
     val brief by graph.lastBrief.collectAsState()
     Box(Modifier.fillMaxSize().padding(48.dp)) {
-        Column(Modifier.align(Alignment.Center).widthIn(max = 1180.dp).fillMaxWidth().roCard(36).padding(horizontal = 60.dp, vertical = 52.dp)) {
+        Column(Modifier.align(Alignment.Center).widthIn(max = 1180.dp).fillMaxWidth().roCard(40).padding(horizontal = 64.dp, vertical = 56.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(RoIcons.Car, null, tint = AccentText, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.width(14.dp))
@@ -112,7 +112,7 @@ private fun DrivingView(graph: AppGraph) {
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.Bottom) {
-                Text("%.1f".format(km), color = Ink, fontSize = 128.sp, fontWeight = FontWeight.Bold)
+                Text("%.1f".format(km), color = Ink, fontSize = 144.sp, fontWeight = FontWeight.ExtraBold, style = Tnum)
                 Text("km", color = Sub, fontSize = 48.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 26.dp))
             }
             trip?.destinationName?.let {
@@ -207,7 +207,7 @@ private fun ParkedView(graph: AppGraph) {
 @Composable
 private fun NavRail(tab: Tab, onTab: (Tab) -> Unit) {
     Row(Modifier.fillMaxHeight()) {
-        Column(Modifier.width(196.dp).fillMaxHeight().background(Rail).padding(vertical = 28.dp, horizontal = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.width(168.dp).fillMaxHeight().background(Rail).padding(vertical = 28.dp, horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("로드오피스", color = AccentText, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
             Text("RoadOffice", color = Sub, fontSize = 15.sp)
             Spacer(Modifier.height(28.dp))
@@ -215,7 +215,6 @@ private fun NavRail(tab: Tab, onTab: (Tab) -> Unit) {
             Spacer(Modifier.weight(1f))
             RailItem(Tab.SIGNALS, tab == Tab.SIGNALS, small = true) { onTab(Tab.SIGNALS) }
         }
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Line))
     }
 }
 
@@ -223,13 +222,13 @@ private fun NavRail(tab: Tab, onTab: (Tab) -> Unit) {
 private fun RailItem(t: Tab, on: Boolean, small: Boolean = false, onClick: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(22.dp))
-            .background(if (on) Active else Color.Transparent).clickable(onClick = onClick)
+            .background(if (on) Strong else Color.Transparent).clickable(onClick = onClick)
             .padding(vertical = if (small) 12.dp else 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(t.icon(), null, tint = if (on) OnAccent else Sub, modifier = Modifier.size(if (small) 32.dp else 42.dp))
+        Icon(t.icon(), null, tint = if (on) OnStrong else Sub, modifier = Modifier.size(if (small) 30.dp else 40.dp))
         Spacer(Modifier.height(6.dp))
-        Text(t.label, color = if (on) OnAccent else Ink, fontSize = if (small) 18.sp else 22.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.SemiBold)
+        Text(t.label, color = if (on) OnStrong else Ink, fontSize = if (small) 18.sp else 22.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.SemiBold)
     }
 }
 
@@ -254,7 +253,8 @@ private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
 private fun TodayTab(graph: AppGraph) {
     val (from, to) = remember { dayRange() }
     // 처음 읽기 전에는 빈 목록·"0건"을 보여 주지 않는다 (불러오는 동안 0건이 깜빡이는 문제)
-    val loadedTrips by graph.db.trips().observeBetween(from, to).collectAsState(initial = null as List<TripEntity>?)
+    val tripsFlow = remember(from, to) { graph.db.trips().observeBetween(from, to) }
+    val loadedTrips by tripsFlow.collectAsState(initial = null as List<TripEntity>?)
     val trips = loadedTrips ?: return
     val business = trips.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.distanceKm }
     val guest = rememberGuest(graph)
@@ -262,10 +262,21 @@ private fun TodayTab(graph: AppGraph) {
     val evening = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) >= graph.dayEndHour
     Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(Modifier.weight(1.7f)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Stat("오늘 운행", "${trips.size}건", modifier = Modifier.weight(1f))
-                Stat("업무 거리", "%.1f km".format(business), AccentText, modifier = Modifier.weight(1f))
-                Stat("미분류", "${trips.count { it.purpose == Purpose.UNKNOWN.name }}건", if (trips.any { it.purpose == Purpose.UNKNOWN.name }) WarnText else Ink, modifier = Modifier.weight(1f))
+            // 히어로 카드 하나 — 오늘 업무 거리를 크게, 나머지는 한 줄로
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp))
+                    .background(Brush.linearGradient(listOf(Banner, Card)))
+                    .padding(horizontal = 36.dp, vertical = 30.dp),
+            ) {
+                Text("오늘 업무 거리", color = Sub, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text("%.1f".format(business), color = Ink, fontSize = 76.sp, fontWeight = FontWeight.ExtraBold, style = Tnum)
+                    Text("km", color = Sub, fontSize = 32.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp, bottom = 14.dp))
+                    Spacer(Modifier.weight(1f))
+                    MiniStat("오늘 운행", "${trips.size}건")
+                    Spacer(Modifier.width(36.dp))
+                    MiniStat("미분류", "${trips.count { it.purpose == Purpose.UNKNOWN.name }}건", if (trips.count { it.purpose == Purpose.UNKNOWN.name } > 0) WarnText else Ink)
+                }
             }
             Spacer(Modifier.height(24.dp))
             SectionTitle("운행 기록", "업무·개인을 누르면 월말 정산에 바로 반영돼요")
@@ -280,10 +291,9 @@ private fun TodayTab(graph: AppGraph) {
             if (evening) Button(
                 onClick = { graph.openDayClose() },
                 colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent),
-                shape = RoundedCornerShape(22.dp),
                 modifier = Modifier.fillMaxWidth().height(96.dp),
             ) { Text("오늘 마감 30초", fontSize = 28.sp, fontWeight = FontWeight.Bold) }
-            else OutlinedButton(onClick = { graph.openDayClose() }, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().height(80.dp)) {
+            else SoftButton(onClick = { graph.openDayClose() }, modifier = Modifier.fillMaxWidth().height(80.dp)) {
                 Text("오늘 마감", fontSize = 24.sp, color = Ink, fontWeight = FontWeight.SemiBold)
             }
         }
@@ -323,6 +333,14 @@ private fun TodoPanel(graph: AppGraph, guest: Boolean) {
 }
 
 @Composable
+private fun MiniStat(label: String, value: String, color: Color = Ink) {
+    Column(Modifier.padding(bottom = 12.dp), horizontalAlignment = Alignment.End) {
+        Text(label, color = Sub, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+        Text(value, color = color, fontSize = 36.sp, fontWeight = FontWeight.Bold, style = Tnum)
+    }
+}
+
+@Composable
 internal fun SectionTitle(title: String, hint: String? = null) {
     Row(Modifier.padding(bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
         Text(title, color = Ink, fontSize = 26.sp, fontWeight = FontWeight.Bold)
@@ -349,18 +367,18 @@ internal fun TripRow(t: TripEntity, guest: Boolean = false, onPurpose: (Purpose)
             )
         }
         // 업무·개인·미분류 — 붙어 있는 세그먼트 버튼
-        Row(Modifier.clip(RoundedCornerShape(18.dp)).background(Field).padding(4.dp)) {
+        Row(Modifier.clip(CircleShape).background(Field).padding(5.dp)) {
             Purpose.entries.forEach { p ->
                 val on = t.purpose == p.name
                 val unknown = p == Purpose.UNKNOWN
                 Text(
                     p.label(),
-                    color = if (on) (if (unknown) OnWarn else OnAccent) else Ink,
+                    color = if (on) (if (unknown) OnWarn else OnStrong) else Sub,
                     fontSize = 22.sp,
                     fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (on) (if (unknown) Warn else Active) else Color.Transparent)
+                        .clip(CircleShape)
+                        .background(if (on) (if (unknown) Warn else Strong) else Color.Transparent)
                         .clickable { onPurpose(p) }
                         .padding(horizontal = 22.dp, vertical = 16.dp),
                 )
@@ -375,8 +393,10 @@ private fun WorkMileTab(graph: AppGraph) {
     var offset by remember { mutableStateOf(if (Calendar.getInstance().get(Calendar.DAY_OF_MONTH) <= 7) -1 else 0) }
     val (from, to) = remember(offset) { monthRange(offset) }
     // 불러오기 전 0km·0원이 깜빡이지 않게 (첫 값이 올 때까지 그리지 않음)
-    val loadedTrips by graph.db.trips().observeBetween(from, to).collectAsState(initial = null as List<TripEntity>?)
-    val refills by graph.db.refills().observeBetween(from, to).collectAsState(initial = emptyList())
+    val tripsFlow = remember(from, to) { graph.db.trips().observeBetween(from, to) }
+    val refillsFlow = remember(from, to) { graph.db.refills().observeBetween(from, to) }
+    val loadedTrips by tripsFlow.collectAsState(initial = null as List<TripEntity>?)
+    val refills by refillsFlow.collectAsState(initial = emptyList())
     val trips = loadedTrips ?: return
     var rate by remember { mutableStateOf(graph.perKmRate.toString()) }
     var mode by remember { mutableStateOf(graph.claimMode) }
@@ -450,7 +470,7 @@ private fun WorkMileTab(graph: AppGraph) {
             Spacer(Modifier.height(16.dp))
             run {
                 Button(
-                    shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().height(76.dp),
+                    modifier = Modifier.fillMaxWidth().height(76.dp),
                     onClick = { scope.launch { result = graph.exportMonth(from, to).files.joinToString("\n") { "· " + it.name } } },
                     colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent),
                 ) { Text("정산 파일 내보내기", fontSize = 26.sp, fontWeight = FontWeight.Bold) }
@@ -482,8 +502,7 @@ private fun DebriefBanner(graph: AppGraph) {
     ) {
         if (!guest) {
             Button(
-                onClick = { graph.listenDebrief() }, shape = RoundedCornerShape(22.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent),
+                onClick = { graph.listenDebrief() }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent),
                 modifier = Modifier.height(88.dp),
             ) {
                 Icon(RoIcons.Mic, null, modifier = Modifier.size(36.dp)); Spacer(Modifier.width(8.dp))
@@ -501,9 +520,9 @@ private fun DebriefBanner(graph: AppGraph) {
             )
         }
         Spacer(Modifier.width(16.dp))
-        Button(onClick = { graph.addNote(text) }, shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent), modifier = Modifier.height(72.dp)) { Text("저장", fontSize = 24.sp) }
+        SoftButton(onClick = { graph.addNote(text) }, modifier = Modifier.height(72.dp)) { Text("저장", fontSize = 24.sp, fontWeight = FontWeight.SemiBold) }
         Spacer(Modifier.width(10.dp))
-        OutlinedButton(onClick = { graph.dismissDebrief() }, shape = RoundedCornerShape(18.dp), modifier = Modifier.height(72.dp)) { Text("나중에", fontSize = 24.sp, color = Ink) }
+        SoftButton(onClick = { graph.dismissDebrief() }, modifier = Modifier.height(72.dp)) { Text("나중에", fontSize = 24.sp, color = Ink) }
     }
 }
 
@@ -513,7 +532,8 @@ internal val dayOnly = SimpleDateFormat("M/d(E)", Locale.KOREA)
 @Composable
 private fun NotesTab(graph: AppGraph) {
     if (!PrivacyGate(graph, "상담 일지")) return
-    val loadedNotes by graph.db.notes().observeAll().collectAsState(initial = null as List<MeetingNoteEntity>?)
+    val notesFlow = remember { graph.db.notes().observeAll() }
+    val loadedNotes by notesFlow.collectAsState(initial = null as List<MeetingNoteEntity>?)
     val notes = loadedNotes ?: return // 불러오는 동안 "0건"·빈 안내를 깜빡이지 않게
     val openTasks = notes.filter { !it.tasksDone }.sumOf { n -> n.tasks.lines().count { it.isNotBlank() } }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -555,7 +575,7 @@ private fun NoteRow(n: MeetingNoteEntity, graph: AppGraph, onToggle: () -> Unit)
             Row(Modifier.padding(top = 8.dp)) {
                 Button(onClick = { graph.reviewNote(n.id, summary, tasks.lines()); editing = false }, colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent), modifier = Modifier.height(64.dp)) { Text("저장", fontSize = 22.sp) }
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { editing = false }, modifier = Modifier.height(64.dp)) { Text("취소", fontSize = 22.sp, color = Ink) }
+                SoftButton(onClick = { editing = false }, modifier = Modifier.height(64.dp)) { Text("취소", fontSize = 22.sp, color = Ink) }
             }
             return@Column
         }
@@ -647,7 +667,7 @@ private fun SignalsTab(graph: AppGraph) {
         Text("화면 색", color = Ink, fontSize = 22.sp, modifier = Modifier.align(Alignment.CenterVertically).padding(end = 12.dp))
         listOf("AUTO" to "자동(차량 주·야간)", "DAY" to "주간", "NIGHT" to "야간").forEach { (k, l) -> Chip(l, mode == k) { graph.setThemeMode(k) } }
         Spacer(Modifier.width(12.dp))
-        OutlinedButton(onClick = { showLicense = true }, modifier = Modifier.height(56.dp)) { Text("오픈소스 라이선스", fontSize = 22.sp, color = Ink) }
+        SoftButton(onClick = { showLicense = true }, modifier = Modifier.height(56.dp)) { Text("오픈소스 라이선스", fontSize = 22.sp, color = Ink) }
     }
     if (showLicense) LicenseDialog { showLicense = false }
     LazyColumn { items(logs) { Text(it, color = Ink, fontSize = 20.sp, modifier = Modifier.padding(vertical = 3.dp)) } }
@@ -655,10 +675,10 @@ private fun SignalsTab(graph: AppGraph) {
 
 @Composable
 internal fun Stat(label: String, value: String, valueColor: Color = Ink, modifier: Modifier = Modifier.width(280.dp)) {
-    Column(modifier.roCard().padding(horizontal = 24.dp, vertical = 20.dp)) {
-        Text(label, color = Sub, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(4.dp))
-        Text(value, color = valueColor, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+    Column(modifier.roCard(24).padding(horizontal = 26.dp, vertical = 22.dp)) {
+        Text(label, color = Sub, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(6.dp))
+        Text(value, color = valueColor, fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, style = Tnum)
     }
 }
 

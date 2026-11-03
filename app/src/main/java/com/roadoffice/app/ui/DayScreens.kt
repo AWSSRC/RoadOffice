@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
@@ -60,12 +59,12 @@ internal fun rememberGuest(graph: AppGraph): Boolean {
 internal fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
     Text(
         label,
-        color = if (on) OnAccent else Ink,
+        color = if (on) OnStrong else Ink,
         fontSize = 22.sp,
         modifier = Modifier
             .padding(end = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(if (on) Active else Field) // 카드 위에서도 버튼으로 보이게
+            .background(if (on) Strong else Field) // 카드 위에서도 버튼으로 보이게
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp), // 터치 높이 약 64dp
     )
@@ -196,7 +195,7 @@ internal fun RefillBanner(graph: AppGraph, collapsed: Boolean) {
         Spacer(Modifier.width(8.dp))
         AmountEditor(graph, r)
         Spacer(Modifier.width(8.dp))
-        OutlinedButton(onClick = { hidden = hidden + r.id }, modifier = Modifier.height(64.dp)) { Text("나중에", fontSize = 22.sp, color = Ink) }
+        SoftButton(onClick = { hidden = hidden + r.id }, modifier = Modifier.height(64.dp)) { Text("나중에", fontSize = 22.sp, color = Ink) }
     }
 }
 
@@ -221,7 +220,7 @@ internal fun DayClosePanel(graph: AppGraph) {
 
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { graph.cancelDayClose() }, modifier = Modifier.height(64.dp)) { Text("← 돌아가기", fontSize = 22.sp, color = Ink) }
+            SoftButton(onClick = { graph.cancelDayClose() }, modifier = Modifier.height(64.dp)) { Text("← 돌아가기", fontSize = 22.sp, color = Ink) }
             Spacer(Modifier.width(20.dp))
             Text("오늘 마감 30초", color = AccentText, fontSize = 34.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(20.dp))
