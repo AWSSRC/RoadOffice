@@ -11,7 +11,7 @@ data class MeetingSummary(
     val source: String,
 )
 
-/** 회고 텍스트 → 요약·할 일·후속 일정. 구현은 기기 내장 규칙 / Pleos LLM / 서버(Bedrock) 로 바꿔 끼운다. */
+/** 회고 텍스트 → 요약·할 일·후속 일정. 구현은 기기 내장 규칙 / Pleos LLM / 서버(H Chat) 로 바꿔 끼운다. */
 interface NoteAssistant {
     suspend fun structure(text: String, clientName: String?, now: Long = System.currentTimeMillis()): MeetingSummary
 }
