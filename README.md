@@ -6,7 +6,7 @@
 
 ## APK
 
-- `apk/AWSSRC_RoadOffice_release.apk` — release 빌드 (APK Signature Scheme v2·v3 서명, arm64-v8a · x86_64)
+- `apk/AWSSRC_RoadOffice_release.apk` — release 빌드 (APK Signature Scheme v3 서명, arm64-v8a · x86_64)
 
 ## 테스트 환경
 
@@ -14,8 +14,9 @@
 |---|---|
 | 플랫폼 | Pleos Connect (Android Automotive OS), Pleos Connect Emulator 2.1.0 · API 34 · arm64 |
 | Pleos SDK | Vehicle 2.3.2 · NaviHelper 3.0.5 · FusedLocation 1.1.3 · SpeechToText/TextToSpeech 3.3.1 (ON_DEVICE) · LLM 2.1.3.2 · Gleo Interface |
+| 차 안 AI 모델 | Qwen2.5-0.5B-Instruct q8 (.task 546MB, Apache-2.0) · MediaPipe LLM Inference 0.10.24 — APK 밖 파일, `adb push -Z <모델> /data/local/tmp/llm/roadoffice_llm.task` (없으면 규칙 정리기로 동작) |
 | 빌드 | JDK 17 · Gradle 8.7 · AGP 8.5.2 · Kotlin 1.9.24 · Jetpack Compose |
-| 미검증 | 실차, 실제 마이크 입력, 기기 내장 LLM 응답(에뮬레이터 무응답 → 10초 뒤 규칙 정리기로 자동 전환), 내비 경로 서버 이벤트 |
+| 미검증 | 실차, 실제 마이크 입력, Pleos 플랫폼 LLM 응답(에뮬레이터는 플랫폼 LLM 꺼짐 → 차 안 소형 모델이 요약, 실패 시 규칙 정리기), 내비 경로 서버 이벤트 |
 
 ## 실행 방법
 
@@ -62,7 +63,7 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ```
 app/src/main/java/com/roadoffice/app/
   vehicle/   차량 신호 (Pleos SDK · AAOS)        workmile/  운행 기록·분류·정산·주유충전·하루 마감
-  cabin/     좌석 점유·동승자·좌석 값 자가 보정   meeting/   브리핑·회고·상담 정리(LLM→규칙)·사전 교정
+  cabin/     좌석 점유·동승자·좌석 값 자가 보정   meeting/   브리핑·회고·상담 정리(Pleos LLM→차 안 모델→규칙)·사전 교정
   gleo/      Gleo Interface receiver             data/      Room+SQLCipher·Keystore
   ui/        Compose 화면 (주행/정차)
 app/src/debug/   시연용 가상 데이터 (release 에 포함되지 않음)
