@@ -14,14 +14,15 @@ import kotlin.coroutines.resume
 
 /**
  * Pleos LLM SDK(기기 내장 모드)로 회고를 정리. 차 밖으로 데이터가 나가지 않는다.
- * 실패·시간 초과·형식 오류면 [fallback](규칙 기반)으로 정리한다.
+ * 실패·시간 초과·형식 오류면 [fallback](차 안 소형 모델 → 규칙 기반)으로 넘긴다.
  *
  * 보안: 사용자 발화는 <note> 구분자 안의 '데이터'로만 넘기고, 출력은 JSON 스키마로 검증한 값만 쓴다
  * (발화 안의 지시문이 동작을 바꾸지 못하게 — 프롬프트 인젝션 대비).
  */
 class LlmNoteAssistant(
     context: Context,
-    private val fallback: RuleNoteAssistant = RuleNoteAssistant(),
+    private val fallback: NoteAssistant = RuleNoteAssistant(),
+    private val rules: RuleNoteAssistant = RuleNoteAssistant(),
     private val log: (String) -> Unit = {},
     private val timeoutMs: Long = 10_000,
 ) : NoteAssistant {
@@ -36,7 +37,7 @@ class LlmNoteAssistant(
         val raw = withTimeoutOrNull(timeoutMs) { generate(prompt(text, clientName, now)) }
         val parsed = raw?.let { parse(it, text, now) }
         if (parsed == null) {
-            log("LLM 정리 실패 → 규칙 기반으로 정리 (${if (raw == null) "응답 없음" else "형식 오류"})")
+            log("Pleos LLM 정리 실패 → 다음 단계로 (${if (raw == null) "응답 없음" else "형식 오류"})")
             if (raw == null) available = false // 이번 실행에서는 다시 기다리지 않음
             return fallback.structure(text, clientName, now)
         }
@@ -46,7 +47,8 @@ class LlmNoteAssistant(
     private suspend fun generate(prompt: String): String? = suspendCancellableCoroutine { cont ->
         val sb = StringBuilder()
         runCatching {
-            llm.generateContent(prompt, object : ResultListener {
+            // 기기 내장 모드는 스트림 호출만 지원 — 모델이 꺼져 있으면 바로 오류가 와서 기다리지 않는다
+            llm.generateContentStream(prompt, object : ResultListener {
                 override fun onResponse(response: String, isFinal: Boolean) {
                     sb.append(response)
                     if (isFinal && cont.isActive) cont.resume(sb.toString())
@@ -70,7 +72,7 @@ class LlmNoteAssistant(
         """.trimIndent()
     }
 
-    fun parse(raw: String, original: String, now: Long) = LlmParser.parse(raw, original, now, fallback)
+    fun parse(raw: String, original: String, now: Long) = LlmParser.parse(raw, original, now, rules)
 
     private companion object {
         const val WARMUP_MS = 3_000L

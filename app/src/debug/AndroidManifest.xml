@@ -7,5 +7,14 @@
                 <action android:name="com.roadoffice.app.DEMO_SEED" />
             </intent-filter>
         </receiver>
+            <receiver android:name=".demo.LlmProbeReceiver" android:exported="true">
+            <intent-filter><action android:name="com.roadoffice.app.LLM_PROBE" /></intent-filter>
+        </receiver>
+        <receiver android:name=".demo.LocalLlmProbeReceiver" android:exported="true">
+            <intent-filter><action android:name="com.roadoffice.app.LOCAL_LLM_PROBE" /></intent-filter>
+        </receiver>
+        <receiver android:name=".demo.LlmEvalReceiver" android:exported="true">
+            <intent-filter><action android:name="com.roadoffice.app.LLM_EVAL" /></intent-filter>
+        </receiver>
     </application>
 </manifest>

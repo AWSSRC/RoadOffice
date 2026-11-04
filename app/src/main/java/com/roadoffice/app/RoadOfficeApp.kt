@@ -13,6 +13,8 @@ import com.roadoffice.app.meeting.DebriefTrigger
 import com.roadoffice.app.meeting.NoteAssistant
 import com.roadoffice.app.meeting.TermFixer
 import com.roadoffice.app.meeting.LlmNoteAssistant
+import com.roadoffice.app.meeting.LocalLlmNoteAssistant
+import com.roadoffice.app.meeting.RuleNoteAssistant
 import com.roadoffice.app.meeting.Voice
 import com.roadoffice.app.vehicle.NaviEvent
 import com.roadoffice.app.vehicle.VehicleSignals
@@ -88,8 +90,10 @@ class AppGraph(private val context: Context) {
     val voice by lazy { Voice(context) { signals.log(it) } }
     val settings = context.getSharedPreferences("roadoffice_settings", Context.MODE_PRIVATE)
     private val reports = ReportWriter(context)
-    /** 상담 일지 정리기: Pleos 기기 내장 LLM 우선, 안 되면 규칙 기반 (서버 H Chat 은 승인 후 추가) */
-    val assistant: NoteAssistant by lazy { LlmNoteAssistant(context, log = { signals.log(it) }) }
+    /** 상담 일지 정리기: Pleos LLM → 차 안 소형 모델(Qwen2.5-1.5B) → 규칙 기반. 모두 차 안에서 (서버 H Chat 은 승인 후 추가) */
+    val localLlm by lazy { LocalLlmNoteAssistant(context, next = RuleNoteAssistant(), log = { signals.log(it) }) }
+    val assistant: NoteAssistant by lazy { LlmNoteAssistant(context, fallback = localLlm, log = { signals.log(it) }) }
+    init { CoroutineScope(Dispatchers.Default).launch { localLlm.warmUp() } }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val recorder = TripRecorder()
@@ -315,6 +319,10 @@ class AppGraph(private val context: Context) {
      * 회고 텍스트 저장 (음성·화면 입력·Gleo 공통). 대기 중인 회고가 없으면 마지막 업무 운행에 붙인다.
      * 음성·Gleo 로 온 말은 고유명사 사전(거래처·제품 이름)으로 고친 뒤 정리하고, 정차 중 확인 전까지 "확인 필요"로 둔다.
      */
+    /** 상담 일지를 정리하는 중(차 안 모델은 10~30초) — 화면에 "AI가 정리하고 있어요" */
+    private val _organizing = MutableStateFlow(false)
+    val organizing: StateFlow<Boolean> = _organizing
+
     fun addNote(rawText: String, clientNameHint: String? = null, fromVoice: Boolean = false) = scope.launch {
         if (rawText.isBlank()) return@launch
         val fixed = if (fromVoice) TermFixer.fix(rawText, db.clients().all().map { it.name } + terms) else TermFixer.Result(rawText, emptyList())
@@ -326,7 +334,8 @@ class AppGraph(private val context: Context) {
             // 말 속에 등록 거래처 이름이 있으면 그 거래처 (사전 교정 뒤라 "한빗 병원"도 잡힌다)
             ?: db.clients().all().filter { text.replace(" ", "").contains(it.name.replace(" ", "")) }.maxByOrNull { it.name.length }
         val clientName = client?.name ?: pending?.clientName ?: clientNameHint
-        val s = assistant.structure(text, clientName)
+        _organizing.value = true
+        val s = try { assistant.structure(text, clientName) } finally { _organizing.value = false }
         db.notes().insert(
             MeetingNoteEntity(
                 clientId = client?.id ?: pending?.clientId,

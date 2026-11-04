@@ -75,6 +75,8 @@ dependencies {
     implementation("ai.pleos.playground:SpeechToText:3.3.1")
     implementation("ai.pleos.playground:TextToSpeech:3.3.1")
     implementation("ai.pleos.playground:LLM:2.1.3.2")
+    // 차 안 소형 언어모델 실행(LiteRT/MediaPipe) — Pleos LLM 을 못 쓰는 차·에뮬레이터에서 상담 정리. 모델 파일은 APK 에 넣지 않는다
+    implementation("com.google.mediapipe:tasks-genai:0.10.24")
 
     // 저장소: Room + SQLCipher(전체 DB 암호화, 키는 Android Keystore 로 보호)
     implementation("androidx.room:room-runtime:2.6.1")

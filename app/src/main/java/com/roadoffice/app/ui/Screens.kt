@@ -539,6 +539,15 @@ private fun NotesTab(graph: AppGraph) {
         Stat("남은 할 일", "${openTasks}개", if (openTasks > 0) WarnText else Ink, modifier = Modifier.weight(1f))
         Stat("후속 일정", "${notes.count { it.followUpAt != null && !it.tasksDone }}건", modifier = Modifier.weight(1f))
     }
+    val organizing by graph.organizing.collectAsState()
+    if (organizing) {
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Banner).padding(horizontal = 24.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.CircularProgressIndicator(color = AccentText, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(16.dp))
+            Text("AI가 차 안에서 상담 내용을 정리하고 있어요 · 인터넷 연결 없이", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
     Spacer(Modifier.height(16.dp))
     if (notes.isEmpty()) Text("거래처 방문 후 차에 다시 타면 \"미팅 어땠어요?\" 하고 물어요. 말한 내용이 여기에 정리됩니다.", color = Sub, fontSize = 24.sp)
     // 새 일지가 맨 위에 들어오면 목록도 맨 위로 (방금 말한 내용이 바로 보이게)
@@ -554,7 +563,15 @@ private fun NoteRow(n: MeetingNoteEntity, graph: AppGraph, onToggle: () -> Unit)
     var editing by remember(n.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().roCard().padding(horizontal = 26.dp, vertical = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(n.clientName ?: "거래처 미지정", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(n.clientName ?: "거래처 미지정", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            if (n.source == "local-llm" || n.source == "llm") {
+                Spacer(Modifier.width(12.dp))
+                Row(Modifier.clip(CircleShape).background(Banner).padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(RoIcons.Spark, null, tint = AccentText, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                    Text(if (n.source == "llm") "AI 요약 · Pleos LLM" else "AI 요약 · 차 안 모델", color = AccentText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.weight(1f))
             if (n.needsReview && !editing) {
                 // 음성·Gleo 로 정리된 일지 — 정차 중에 맞는지 확인 (음성 인식 오류 대비)
                 Text("확인 필요 · 음성 정리", color = OnWarn, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
