@@ -27,6 +27,9 @@ seat passenger false; seat rear_left false; seat rear_right false; seat driver t
 post "ev-battery?field=charge_port_open&value=false"; post "ev-battery?field=charge_switch&value=false"   # 계기판 '충전구 열림' 경고 끄기
 $ADB uninstall com.roadoffice.app >/dev/null 2>&1 || true
 $ADB install -g app/build/outputs/apk/debug/app-debug.apk >/dev/null
+# 차 안 소형 언어모델(APK 밖 파일, ../models) — 있으면 시연 기기에 넣는다. 압축 전송(-z 기본)은 멈출 수 있어 -Z
+M=../models/qwen2.5-0.5b-instruct_q8_ekv1280.task
+if [ -f "$M" ]; then $ADB shell mkdir -p /data/local/tmp/llm; $ADB shell ls /data/local/tmp/llm/roadoffice_llm.task >/dev/null 2>&1 || $ADB push -Z "$M" /data/local/tmp/llm/roadoffice_llm.task >/dev/null; $ADB shell chmod 644 /data/local/tmp/llm/roadoffice_llm.task; fi
 geo $LAT $LON; sleep 2
 $ADB shell am start -n com.roadoffice.app/.MainActivity >/dev/null; sleep 12
 # 거래처(한빛병원)를 현재 위치로 등록하려면 앱이 위치를 받은 뒤여야 한다 — 에뮬레이터 재부팅 직후엔 늦게 온다
@@ -60,8 +63,10 @@ stop 03
 say "04 회고 답 → 상담 일지 (에뮬레이터 마이크 미지원 — 같은 문장을 Gleo 메모로 전달)"
 rec
 # 음성 인식이 거래처 이름을 띄어·틀리게 받은 상황("한빗 병원") — 사전 교정으로 바로잡히는지 함께 보여 준다
+tap "상담 일지"; sleep 2; $ADB logcat -c
 gleo ADD_MEETING_NOTE '{"note":"한빗 병원 원장님이 신제품 샘플 반응이 좋다고 하셨어요 다음 주 화요일에 다시 연락 주신대요 그리고 금요일까지 단가표 보내 드리기로 했어요"}'
-sleep 5; tap "상담 일지"; sleep 13   # 정리(LLM 10초 대기 → 규칙 정리기) 결과가 목록 맨 위에 뜨는 것까지
+# 차 안 모델이 요약하는 동안 "AI가 정리하고 있어요" → 저장되면 맨 위에 'AI 요약' 배지와 함께 뜬다 (보통 15~25초)
+for k in $(seq 1 30); do sleep 2; $ADB logcat -d | grep -q "상담 일지 저장" && break; done; sleep 4
 stop 04
 
 say "04b 정차 중 확인 — '확인 필요' → 맞아요"

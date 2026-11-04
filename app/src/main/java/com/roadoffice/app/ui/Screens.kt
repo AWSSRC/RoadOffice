@@ -286,6 +286,8 @@ private fun TodayTab(graph: AppGraph) {
         Column(Modifier.weight(1f)) {
             TodoPanel(graph, guest)
             Spacer(Modifier.height(16.dp))
+            UpcomingPanel(graph, guest)
+            Spacer(Modifier.height(16.dp))
             if (evening) Button(
                 onClick = { graph.openDayClose() },
                 colors = ButtonDefaults.buttonColors(containerColor = Active, contentColor = OnAccent),
@@ -335,6 +337,38 @@ private fun MiniStat(label: String, value: String, color: Color = Ink) {
     Column(Modifier.padding(bottom = 12.dp), horizontalAlignment = Alignment.End) {
         Text(label, color = Sub, fontSize = 20.sp, fontWeight = FontWeight.Medium)
         Text(value, color = color, fontSize = 36.sp, fontWeight = FontWeight.Bold, style = Tnum)
+    }
+}
+
+/** 다가오는 후속 일정 — 거래처에 가까워지면(1km) 지난 상담을 음성으로 먼저 알려 준다는 걸 첫 화면에서 보이게. */
+@Composable
+private fun UpcomingPanel(graph: AppGraph, guest: Boolean) {
+    val flow = remember { graph.db.notes().observeAll() }
+    val notes by flow.collectAsState(initial = emptyList())
+    val (from, _) = remember { dayRange() }
+    val next = notes.filter { (it.followUpAt ?: 0) >= from }.sortedBy { it.followUpAt }.distinctBy { it.clientName }.take(3)
+    if (next.isEmpty()) return
+    Column(Modifier.fillMaxWidth().roCard().padding(24.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(RoIcons.Calendar, null, tint = AccentText, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("다가오는 후속 일정", color = Ink, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(10.dp))
+        if (guest) Text("${next.size}건 · 동승자 탑승 중이라 거래처는 가렸어요", color = Sub, fontSize = 21.sp)
+        else next.forEach { n ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(dayOnly.format(Date(n.followUpAt!!)), color = AccentText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(92.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(n.clientName ?: "거래처 미지정", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(n.summary, color = Sub, fontSize = 18.sp, maxLines = 1)
+                }
+            }
+        }
+        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(RoIcons.Speaker, null, tint = Sub, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(6.dp))
+            Text("거래처 1km 앞에서 지난 상담을 음성으로 먼저 알려 드려요", color = Sub, fontSize = 18.sp)
+        }
     }
 }
 
@@ -406,7 +440,7 @@ private fun WorkMileTab(graph: AppGraph) {
         refills.filter { it.purpose == Purpose.BUSINESS.name }.sumOf { it.amount ?: 0L },
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("${SimpleDateFormat("M월", Locale.KOREA).format(Date(from))} 워크마일", color = AccentText, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text("${SimpleDateFormat("M월", Locale.KOREA).format(Date(from))} 워크마일", color = Ink, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(20.dp))
         Chip("지난달", offset == -1) { offset = -1 }
         Chip("이번 달", offset == 0) { offset = 0 }
@@ -441,8 +475,8 @@ private fun WorkMileTab(graph: AppGraph) {
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                if (mode == ClaimMode.KM_RATE) "청구액 = 업무 km × 단가 + 업무 운행 예상 통행료. 거리는 차량 주행거리계 기준 · 주유·충전 기록은 참고로만 붙어요(이중 청구 방지)."
-                else "청구액 = 업무 주유·충전 실비 + 업무 운행 예상 통행료. 주유·충전은 차량 배터리·연료 상승으로 자동 포착돼요.",
+                if (mode == ClaimMode.KM_RATE) "청구액 = 업무 km × 단가 + 예상 통행료 · 거리는 주행거리계 기준"
+                else "청구액 = 업무 주유·충전 실비 + 예상 통행료 · 주유·충전은 자동 포착",
                 color = Sub, fontSize = 20.sp,
             )
         }
@@ -616,7 +650,8 @@ private fun NoteRow(n: MeetingNoteEntity, graph: AppGraph, onToggle: () -> Unit)
                 }
             }
         }
-        Text("원문 · ${n.rawText}", color = Sub, fontSize = 18.sp, maxLines = 1, modifier = Modifier.padding(top = 10.dp))
+        // 원문은 확인이 필요한 음성 정리에만 (사전 교정 전 말을 대조해 볼 수 있게)
+        if (n.needsReview) Text("원문 · ${n.rawText}", color = Sub, fontSize = 18.sp, maxLines = 1, modifier = Modifier.padding(top = 10.dp))
     }
 }
 

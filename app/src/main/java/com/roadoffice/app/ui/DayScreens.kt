@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
@@ -76,10 +78,10 @@ internal fun PrivacyChip(graph: AppGraph) {
     val cabin by graph.signals.cabin.collectAsState()
     var confirmOff by remember { mutableStateOf(false) }
     val text = when {
-        !privacy -> "동승자 보호 꺼짐"
+        !privacy -> "동승자 보호: 꺼짐"
         !cabin.known -> "좌석 센서 없음 · 자동 보호 안 됨"
         cabin.guestOnBoard -> "동승자 탑승 · 보호 중"
-        else -> "동승자 보호 켬"
+        else -> "동승자 보호: 켜짐"
     }
     if (confirmOff) AlertDialog(
         onDismissRequest = { confirmOff = false },
@@ -133,6 +135,7 @@ private fun AmountEditor(graph: AppGraph, r: RefillEntity) {
         value = text,
         onValueChange = { v -> text = v.filter { it.isDigit() }.take(7) },
         singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), // 숫자 패드만
         placeholder = { Text("금액(원)") },
         modifier = Modifier.width(200.dp),
     )
@@ -246,19 +249,28 @@ internal fun DayClosePanel(graph: AppGraph) {
                 item { Section("남은 할 일 — 끝낸 건 눌러서 체크") }
                 if (guest) item { Text("할 일 ${openCount}개 · 동승자 탑승 중이라 내용은 가렸어요", color = Sub, fontSize = 22.sp) }
                 else items(open, key = { "n${it.id}" }) { n ->
-                    Column(Modifier.fillMaxWidth().roCard().clickable { graph.setTasksDone(n.id, true) }.padding(14.dp)) {
-                        Text(n.clientName ?: "거래처 미지정", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        n.tasks.lines().filter { it.isNotBlank() }.forEach { Text("☐ $it", color = WarnText, fontSize = 22.sp) }
+                    Row(Modifier.fillMaxWidth().roCard().clickable { graph.setTasksDone(n.id, true) }.padding(horizontal = 22.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(RoIcons.Box, null, tint = Sub, modifier = Modifier.size(30.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            n.tasks.lines().filter { it.isNotBlank() }.forEach { Text(it, color = Ink, fontSize = 23.sp, fontWeight = FontWeight.SemiBold) }
+                            Text(n.clientName ?: "거래처 미지정", color = Sub, fontSize = 19.sp)
+                        }
+                        Text("완료", color = AccentText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
             if (tomorrow.isNotEmpty()) {
                 item { Section("내일 후속 일정") }
                 item {
-                    Text(
-                        if (guest) "${tomorrow.size}건 · 동승자 탑승 중이라 거래처명은 가렸어요" else tomorrow.mapNotNull { it.clientName }.distinct().joinToString("  ·  "),
-                        color = Ink, fontSize = 24.sp,
-                    )
+                    Row(Modifier.fillMaxWidth().roCard().padding(horizontal = 22.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(RoIcons.Calendar, null, tint = AccentText, modifier = Modifier.size(28.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Text(
+                            if (guest) "${tomorrow.size}건 · 동승자 탑승 중이라 거래처명은 가렸어요" else tomorrow.mapNotNull { it.clientName }.distinct().joinToString("  ·  "),
+                            color = Ink, fontSize = 23.sp, fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
             if (left == 0) item { Text("정리할 게 없어요. 오늘 기록은 월말 정산에 그대로 들어가요.", color = Sub, fontSize = 24.sp) }

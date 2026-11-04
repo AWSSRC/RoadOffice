@@ -122,7 +122,7 @@ class RuleNoteAssistant : NoteAssistant {
 object Briefing {
     /** 주행 화면용 한 줄 — 한눈(2초)에 읽히게 거래처와 첫 할 일만. */
     fun short(clientName: String, openTasks: List<String>): String =
-        "$clientName · " + if (openTasks.isEmpty()) "남은 할 일 없음" else "할 일 ${openTasks.size}: ${openTasks.first()}"
+        "$clientName · " + if (openTasks.isEmpty()) "남은 할 일 없음" else "남은 할 일 ${openTasks.size}개 · ${openTasks.first()}"
 
     fun text(clientName: String, lastSummary: String?, openTasks: List<String>, arriving: Boolean = true): String = buildString {
         // 주행 중에 듣는 말 — 두 문장 안쪽으로 짧게 (방문 횟수 등 부가 정보는 화면으로)
