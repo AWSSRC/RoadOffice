@@ -17,7 +17,16 @@ geo() { $ADB emu geo fix "$2" "$1" >/dev/null; }
 tap() { tools/ui.sh tap "$1" >/dev/null; }
 say() { echo "[$(date +%H:%M:%S)] $1"; }
 odo() { curl -s $V/state | python3 -I -c "import json,sys;print(int(json.load(sys.stdin)['odometer']['traveled_distance_km']))"; }
-rec() { $ADB shell rm -f /sdcard/seg.mp4; $ADB shell screenrecord --bit-rate 8000000 --time-limit 120 /sdcard/seg.mp4 & sleep 1; }
+# 맨 앞이 로드오피스가 아니면(차량 제어·공조 화면 등이 덮으면) 닫고 앱을 다시 앞으로 — 11/08 녹화 전체가 공조 화면으로 찍힌 사고 대응
+front() {
+  for k in 1 2 3; do
+    $ADB shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q com.roadoffice.app && return
+    $ADB shell am force-stop ai.umos.vehiclecontrol >/dev/null 2>&1 || true
+    $ADB shell am start -n com.roadoffice.app/.MainActivity >/dev/null; sleep 2
+  done
+  say "   ⚠ 앱이 맨 앞이 아님"
+}
+rec() { front; $ADB shell rm -f /sdcard/seg.mp4; $ADB shell screenrecord --bit-rate 8000000 --time-limit 180 /sdcard/seg.mp4 & sleep 1; }
 stop() { sleep 1; $ADB shell pkill -INT screenrecord || true; sleep 2; $ADB pull /sdcard/seg.mp4 "$OUT/seg_$1.mp4" >/dev/null; say "   → seg_$1.mp4"; }
 gleo() { $ADB shell "am broadcast -a $1 -n com.roadoffice.app/.gleo.GleoReceiver --es ACTION_PARAM '$2'" >/dev/null; }
 LAT=37.4959; LON=127.0293   # 한빛병원(가상)
