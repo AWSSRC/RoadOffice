@@ -8,6 +8,8 @@ import com.roadoffice.app.data.MeetingNoteEntity
 import com.roadoffice.app.data.RefillEntity
 import com.roadoffice.app.data.SecurePrefs
 import com.roadoffice.app.data.TripEntity
+import com.roadoffice.app.meeting.AiAssist
+import com.roadoffice.app.meeting.AskFacts
 import com.roadoffice.app.meeting.Briefing
 import com.roadoffice.app.meeting.DebriefTrigger
 import com.roadoffice.app.meeting.NoteAssistant
@@ -105,6 +107,9 @@ class AppGraph(private val context: Context) {
     private val _lastBrief = MutableStateFlow<String?>(null)
     /** 방금 읽은 브리핑 — 주행 화면에 15초간 한 줄로 (소리로 놓쳐도 다시 볼 수 있게) */
     val lastBrief: StateFlow<String?> = _lastBrief
+    private val _lastTip = MutableStateFlow<String?>(null)
+    /** 브리핑과 함께 보여 줄 AI 제안 한 줄 */
+    val lastTip: StateFlow<String?> = _lastTip
     private val _listening = MutableStateFlow(false)
     val listening: StateFlow<Boolean> = _listening
     private val briefedThisTrip = mutableSetOf<Long>()
@@ -336,7 +341,7 @@ class AppGraph(private val context: Context) {
         val clientName = client?.name ?: pending?.clientName ?: clientNameHint
         _organizing.value = true
         val s = try { assistant.structure(text, clientName) } finally { _organizing.value = false }
-        db.notes().insert(
+        val noteId = db.notes().insert(
             MeetingNoteEntity(
                 clientId = client?.id ?: pending?.clientId,
                 clientName = clientName,
@@ -354,6 +359,39 @@ class AppGraph(private val context: Context) {
         debriefHeld = false
         signals.log("상담 일지 저장: ${clientName ?: "거래처 미지정"} · 할 일 ${s.tasks.size}개")
         voice.speak(if (s.tasks.isEmpty() || guestOnBoard) "상담 일지에 저장했어요." else "저장했어요. 할 일 ${s.tasks.size}개, ${s.tasks.first()}.")
+        refreshFollowUp(noteId) // 이어서 AI 가 후속 문자 초안 · 다음 방문 한 줄을 만들어 둔다
+    }
+
+    // ── 차 안 AI 비서 (후속 제안 · 방문 브리핑 · 질문 답) ─────────────────
+
+    val ai by lazy { AiAssist { p -> localLlm.generate(p, 120_000).also { if (BuildConfig.DEBUG) signals.log("AI 원문: ${it?.replace("\n", " ")?.take(240)}") } } }
+    private val _aiBusy = MutableStateFlow<String?>(null)
+    /** AI 가 지금 하는 일 (화면 표시용) — null 이면 쉬는 중 */
+    val aiBusy: StateFlow<String?> = _aiBusy
+
+    /** 상담 일지 하나에 AI 후속 문자 초안 · 다음 방문 한 줄을 만든다 (회고 저장 직후, 시연 데이터 준비 때) */
+    suspend fun refreshFollowUp(noteId: Long) {
+        val n = db.notes().byId(noteId) ?: return
+        _aiBusy.value = "후속 문자 초안과 다음 방문 브리핑을 만드는 중"
+        val f = try { ai.followUp(n.clientName, n.summary, n.tasks.lines().filter { it.isNotBlank() }) } finally { _aiBusy.value = null }
+        db.notes().setAi(noteId, f.message, f.tip, f.by)
+        signals.log("AI 후속 제안(${if (f.by == AiAssist.AI) "차 안 모델" else "문장 틀"}): ${f.tip}")
+    }
+
+    data class AskResult(val question: String, val answer: String, val byAi: Boolean)
+    private val _lastAnswer = MutableStateFlow<AskResult?>(null)
+    val lastAnswer: StateFlow<AskResult?> = _lastAnswer
+
+    /** Gleo "로드오피스, 이번 달 한빛병원 몇 번 갔어?" — 기록에서 사실을 찾고 AI 가 한 문장으로 답해 읽는다 */
+    suspend fun ask(question: String): String {
+        if (guestOnBoard) { val t = "동승자가 있어서 거래처 기록은 혼자 계실 때 알려 드릴게요."; voice.speak(t); return t }
+        _aiBusy.value = "질문에 답을 찾는 중"
+        val a = try { ai.answer(question, AskFacts.collect(question, db, terms), AskFacts.must(question, db.clients().all(), terms)) } finally { _aiBusy.value = null }
+        _lastAnswer.value = AskResult(question, a.text, a.by == AiAssist.AI)
+        signals.log("AI 답(${if (a.by == AiAssist.AI) "차 안 모델" else "문장 틀"}): ${a.text}")
+        voice.speak(a.text)
+        scope.launch { delay(40_000); if (_lastAnswer.value?.answer == a.text) _lastAnswer.value = null }
+        return a.text
     }
 
     fun dismissDebrief() { _pendingDebrief.value = null; debriefHeld = false }
@@ -371,11 +409,14 @@ class AppGraph(private val context: Context) {
         if (!force && !briefedThisTrip.add(c.id)) return ""
         val notes = db.notes().forClient(c.id)
         val open = notes.filter { !it.tasksDone }.flatMap { it.tasks.lines() }.filter { it.isNotBlank() }
-        val text = Briefing.text(c.name, notes.firstOrNull()?.summary, open, arriving = !force)
+        // AI 방문 브리핑: 지난 회고 때 차 안 AI 가 미리 만들어 둔 "먼저 꺼낼 말" — 주행 중 생성을 기다리지 않는다
+        val tip = notes.firstOrNull { !it.aiTip.isNullOrBlank() }?.aiTip
+        val text = Briefing.text(c.name, notes.firstOrNull()?.summary, open, arriving = !force) + (tip?.let { " 오늘은, ${it.trimEnd('.')}." } ?: "")
         voice.speak(text)
         val line = Briefing.short(c.name, open)
+        _lastTip.value = tip
         _lastBrief.value = line
-        scope.launch { delay(15_000); if (_lastBrief.value == line) _lastBrief.value = null }
+        scope.launch { delay(15_000); if (_lastBrief.value == line) { _lastBrief.value = null; _lastTip.value = null } }
         return text
     }
 

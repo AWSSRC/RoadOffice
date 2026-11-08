@@ -26,6 +26,16 @@ class DemoSeedReceiver : BroadcastReceiver() {
         val g = context.graph
         val month = intent.getBooleanExtra("month", false)
         // 녹화 시각이 퇴근 시각을 넘으면 주차 때 하루 마감이 저절로 열려 장면이 멈춘다 — 시연에선 마감 시각을 고정
+        // 시연용: 주요 거래처 최근 일지에 AI 후속 제안·다음 방문 한 줄을 미리 만들어 둔다 (--ez ai true, 거래처당 10~20초)
+        if (intent.getBooleanExtra("ai", false)) {
+            // 오래 걸리므로 브로드캐스트는 바로 끝내고(ANR 방지) 앱 범위에서 돌린다 — 앱이 앞에 떠 있어야 함(백그라운드 동결)
+            context.graph.launch {
+                val notes = context.graph.db.notes().all()
+                listOf("한빛병원", "새솔내과의원", "푸른정형외과").mapNotNull { c -> notes.firstOrNull { it.clientName == c } }.forEach { context.graph.refreshFollowUp(it.id) }
+                context.graph.signals.log("시연 AI 후속 제안 준비 끝")
+            }
+            return
+        }
         intent.getIntExtra("day_end_hour", -1).takeIf { it in 0..23 }?.let { context.graph.dayEndHour = it }
         val pending = goAsync()
         g.launch {

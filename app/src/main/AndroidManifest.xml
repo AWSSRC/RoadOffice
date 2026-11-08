@@ -49,6 +49,7 @@
                 <action android:name="MARK_TRIP_PURPOSE" />
                 <action android:name="ADD_MEETING_NOTE" />
                 <action android:name="GET_CLIENT_BRIEFING" />
+                <action android:name="ASK_ROADOFFICE" />
             </intent-filter>
         </receiver>
     </application>

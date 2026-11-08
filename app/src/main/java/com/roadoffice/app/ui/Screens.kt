@@ -137,6 +137,16 @@ private fun DrivingView(graph: AppGraph) {
                     Spacer(Modifier.width(20.dp))
                     Text(it, color = Ink, fontSize = 36.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                 }
+                val tip by graph.lastTip.collectAsState()
+                tip?.let { t ->
+                    Spacer(Modifier.height(14.dp))
+                    AiLine("오늘 먼저 꺼낼 말", t, big = true)
+                }
+            }
+            val answer by graph.lastAnswer.collectAsState()
+            if (!guest) answer?.let { a ->
+                Spacer(Modifier.height(24.dp))
+                AiLine("AI 답 · ${a.question}", a.answer, big = true, ai = a.byAi)
             }
             if (guest) {
                 Spacer(Modifier.height(24.dp))
@@ -188,6 +198,7 @@ private fun ParkedView(graph: AppGraph) {
             // 알림 카드는 한 번에 하나 — 회고가 먼저, 주유·충전은 한 줄로 접는다
             val debrief by graph.pendingDebrief.collectAsState()
             DebriefBanner(graph)
+            AiStatus(graph)
             RefillBanner(graph, collapsed = debrief != null)
             Spacer(Modifier.height(12.dp))
             when (tab) {
@@ -361,7 +372,7 @@ private fun UpcomingPanel(graph: AppGraph, guest: Boolean) {
                 Text(dayOnly.format(Date(n.followUpAt!!)), color = AccentText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(92.dp))
                 Column(Modifier.weight(1f)) {
                     Text(n.clientName ?: "거래처 미지정", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text(n.summary, color = Sub, fontSize = 18.sp, maxLines = 1)
+                    Text(n.aiTip?.let { "AI · $it" } ?: n.summary, color = if (n.aiTip != null) AccentText else Sub, fontSize = 18.sp, maxLines = 1)
                 }
             }
         }
@@ -369,6 +380,60 @@ private fun UpcomingPanel(graph: AppGraph, guest: Boolean) {
             Icon(RoIcons.Speaker, null, tint = Sub, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(6.dp))
             Text("거래처 1km 앞에서 지난 상담을 음성으로 먼저 알려 드려요", color = Sub, fontSize = 18.sp)
         }
+    }
+}
+
+/** AI 가 만든 한 줄 — 반짝이 아이콘 + 제목 + 본문. ai=false 면 '문장 틀'(AI 출력이 검사를 못 넘음) */
+@Composable
+internal fun AiLine(title: String, body: String, big: Boolean = false, ai: Boolean = true) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(if (big) 22.dp else 16.dp)).background(Banner).padding(horizontal = if (big) 26.dp else 18.dp, vertical = if (big) 20.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(RoIcons.Spark, null, tint = AccentText, modifier = Modifier.size(if (big) 36.dp else 24.dp))
+        Spacer(Modifier.width(if (big) 16.dp else 10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(if (ai) title else "$title (문장 틀)", color = AccentText, fontSize = if (big) 22.sp else 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(body, color = Ink, fontSize = if (big) 30.sp else 21.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+        }
+    }
+}
+
+/** 정차 화면 위 — AI 가 일하는 중이면 표시, 방금 받은 질문의 답이 있으면 보여 준다 */
+@Composable
+private fun AiStatus(graph: AppGraph) {
+    val busy by graph.aiBusy.collectAsState()
+    val answer by graph.lastAnswer.collectAsState()
+    val guest = rememberGuest(graph)
+    busy?.let {
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Banner).padding(horizontal = 22.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.CircularProgressIndicator(color = AccentText, strokeWidth = 3.dp, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(14.dp))
+            Text("차 안 AI가 $it · 인터넷 연결 없이", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+    if (!guest) answer?.let { a ->
+        Spacer(Modifier.height(10.dp))
+        AiLine("AI 답 · \"${a.question}\"", a.answer, ai = a.byAi)
+    }
+}
+
+/** 상담 일지 카드 안 — AI 후속 문자 초안(복사) · 다음 방문 때 먼저 꺼낼 말 */
+@Composable
+private fun AiFollowUpBox(n: MeetingNoteEntity) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val ai = n.aiBy == "local-llm"
+    var copied by remember(n.id) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp).clip(RoundedCornerShape(16.dp)).background(Banner).padding(horizontal = 18.dp, vertical = 14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(RoIcons.Spark, null, tint = AccentText, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(8.dp))
+            Text(if (ai) "AI 다음 행동 제안 · 차 안 모델" else "다음 행동 제안", color = AccentText, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (!n.aiMessage.isNullOrBlank()) Text(if (copied) "복사됨" else "문자 복사", color = AccentText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(CircleShape).background(Card).clickable {
+                    val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("후속 문자", n.aiMessage)); copied = true
+                }.padding(horizontal = 14.dp, vertical = 6.dp))
+        }
+        n.aiMessage?.takeIf { it.isNotBlank() }?.let { Text("후속 문자 · $it", color = Ink, fontSize = 20.sp, modifier = Modifier.padding(top = 6.dp)) }
+        n.aiTip?.takeIf { it.isNotBlank() }?.let { Text("다음 방문 때 · $it", color = Sub, fontSize = 19.sp, modifier = Modifier.padding(top = 4.dp)) }
     }
 }
 
@@ -650,6 +715,7 @@ private fun NoteRow(n: MeetingNoteEntity, graph: AppGraph, onToggle: () -> Unit)
                 }
             }
         }
+        if (!n.aiMessage.isNullOrBlank() || !n.aiTip.isNullOrBlank()) AiFollowUpBox(n)
         // 원문은 확인이 필요한 음성 정리에만 (사전 교정 전 말을 대조해 볼 수 있게)
         if (n.needsReview) Text("원문 · ${n.rawText}", color = Sub, fontSize = 18.sp, maxLines = 1, modifier = Modifier.padding(top = 10.dp))
     }

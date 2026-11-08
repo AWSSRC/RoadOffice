@@ -36,6 +36,9 @@ $ADB shell am start -n com.roadoffice.app/.MainActivity >/dev/null; sleep 12
 for k in 1 2 3 4 5 6 7 8; do geo $LAT $LON; sleep 3; tools/ui.sh tap "신호" >/dev/null; sleep 1; tools/ui.sh texts | grep -q "37.496" && break; done
 tools/ui.sh tap "오늘 운행" >/dev/null
 $ADB shell am broadcast -a com.roadoffice.app.DEMO_SEED -n com.roadoffice.app/.demo.DemoSeedReceiver --ez month true --ei day_end_hour 23 >/dev/null; sleep 4
+# 차 안 AI: 주요 거래처 최근 일지에 '후속 문자 초안 · 다음 방문 때 먼저 꺼낼 말'을 미리 만들어 둔다 (1km 브리핑에서 바로 읽힘)
+$ADB logcat -c; $ADB shell am broadcast -a com.roadoffice.app.DEMO_SEED -n com.roadoffice.app/.demo.DemoSeedReceiver --ez ai true >/dev/null
+for k in $(seq 1 120); do sleep 3; $ADB logcat -d | grep -q "시연 AI 후속 제안 준비 끝" && break; done; say "   AI 후속 제안 준비 끝"
 tap "워크마일"; sleep 1; tap "실비"; sleep 1; tap "오늘 운행"; sleep 1
 geo 37.4500 $LON; sleep 2
 O=$(( $(odo) + 1 )); put "odometer?traveled_distance_km=$O"; sleep 2
@@ -67,6 +70,8 @@ tap "상담 일지"; sleep 2; $ADB logcat -c
 gleo ADD_MEETING_NOTE '{"note":"한빗 병원 원장님이 신제품 샘플 반응이 좋다고 하셨어요 다음 주 화요일에 다시 연락 주신대요 그리고 금요일까지 단가표 보내 드리기로 했어요"}'
 # 차 안 모델이 요약하는 동안 "AI가 정리하고 있어요" → 저장되면 맨 위에 'AI 요약' 배지와 함께 뜬다 (보통 15~25초)
 for k in $(seq 1 30); do sleep 2; $ADB logcat -d | grep -q "상담 일지 저장" && break; done; sleep 4
+# 이어서 AI 다음 행동 제안(후속 문자 초안 · 다음 방문 한 줄)이 일지 카드에 붙을 때까지
+for k in $(seq 1 75); do sleep 2; $ADB logcat -d | grep -q "AI 후속 제안" && break; done; sleep 4
 stop 04
 
 say "04b 정차 중 확인 — '확인 필요' → 맞아요"
@@ -94,6 +99,13 @@ tap "오늘 운행"; sleep 1
 rec
 sleep 3; gleo MARK_TRIP_PURPOSE '{"purpose":"business"}'; sleep 6
 stop 07
+
+say "07b AI에게 묻기 — Gleo '이번 달 한빛병원 몇 번 갔어?'"
+tap "오늘 운행"; sleep 1; $ADB logcat -c
+rec
+sleep 2; gleo ASK_ROADOFFICE '{"question":"이번 달 한빛병원 몇 번 갔어?"}'
+for k in $(seq 1 75); do sleep 2; $ADB logcat -d | grep -q "AI 답" && break; done; sleep 6
+stop 07b
 
 say "08 하루 마감 30초"
 rec

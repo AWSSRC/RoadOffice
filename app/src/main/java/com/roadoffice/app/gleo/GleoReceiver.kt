@@ -49,6 +49,15 @@ class GleoReceiver : BroadcastReceiver() {
                             respond(context, action, "success", "상담 메모를 받았어요. 할 일로 정리할게요.", mode = "beep")
                         }
                     }
+                    ASK_ROADOFFICE -> {
+                        val q = params.optString("question").take(300)
+                        if (q.isBlank()) respond(context, action, "asking", "무엇이 궁금하세요? 예를 들어 이번 달 한빛병원 몇 번 갔는지 물어보세요.")
+                        else {
+                            // 7초 제한 — 접수만 먼저 알리고, 기록을 찾아 차 안 AI 가 정리한 답은 앱이 직접 읽는다
+                            respond(context, action, "success", "기록을 찾아서 말씀드릴게요.", mode = "beep")
+                            graph.launch { graph.ask(q) }
+                        }
+                    }
                     GET_CLIENT_BRIEFING -> {
                         val name = params.optString("clientName").take(80)
                         // 동승자 보호: 고객이 타 있을 수 있어 거래처 정보를 소리 내 읽지 않는다
@@ -96,6 +105,7 @@ class GleoReceiver : BroadcastReceiver() {
         const val MARK_TRIP_PURPOSE = "MARK_TRIP_PURPOSE"
         const val ADD_MEETING_NOTE = "ADD_MEETING_NOTE"
         const val GET_CLIENT_BRIEFING = "GET_CLIENT_BRIEFING"
+        const val ASK_ROADOFFICE = "ASK_ROADOFFICE"
         const val RESPONSE_ACTION = "ai.pleos.playground.intent.action.APP_ACTION_RESPONSE"
         private const val MAX_TEXT = 2_000
     }

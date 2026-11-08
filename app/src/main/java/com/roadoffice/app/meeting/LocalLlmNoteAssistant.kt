@@ -2,8 +2,10 @@ package com.roadoffice.app.meeting
 
 import android.content.Context
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.File
@@ -44,10 +46,49 @@ class LocalLlmNoteAssistant(
     /** 앱 시작 때 미리 올려 둔다 — 첫 정리 때 모델 로드(2~7초)를 기다리지 않게 */
     suspend fun warmUp() { if (available) withContext(Dispatchers.IO) { engine() } }
 
+    /**
+     * 스트림으로 생성하다가 JSON 이 닫히면(또는 대화 끝 표시가 나오면) 바로 끊는다.
+     * 0.5B 모델은 답을 다 쓴 뒤에도 한도(1024 토큰)까지 계속 쓰는 일이 있어, 그대로 두면 수 분이 걸린다(11/08 실측 228초).
+     */
+    private fun runStream(e: LlmInference, prompt: String, limitMs: Long): String? {
+        val opts = LlmInferenceSession.LlmInferenceSessionOptions.builder().setTemperature(0.2f).setTopK(20).build()
+        val session = LlmInferenceSession.createFromOptions(e, opts)
+        val sb = StringBuilder()
+        val done = java.util.concurrent.CountDownLatch(1)
+        val finished = java.util.concurrent.CountDownLatch(1) // 끊은 뒤에도 엔진이 멈출 때까지 기다려야 다음 요청이 들어간다
+        var cut = false
+        return try {
+            session.addQueryChunk(prompt)
+            session.generateResponseAsync { partial, isDone ->
+                if (partial != null) { if (sb.isEmpty()) log("차 안 모델 첫 토큰"); sb.append(partial) }
+                val t = sb.toString()
+                val open = t.indexOf('{')
+                if (!cut && ((open >= 0 && t.indexOf('}', open) > open) || t.contains("<|im_end|>") || t.contains("<|im_start|>"))) {
+                    cut = true; runCatching { session.cancelGenerateResponseAsync() }; done.countDown()
+                }
+                if (isDone) { done.countDown(); finished.countDown() }
+            }
+            if (!done.await(limitMs, java.util.concurrent.TimeUnit.MILLISECONDS)) { runCatching { session.cancelGenerateResponseAsync() }; log("차 안 모델 시간 초과 (받은 ${sb.length}자: ${sb.take(80)})"); null }
+            else sb.toString().substringBefore("<|im_end|>").also { log("차 안 모델 끝(${it.length}자, 끊음=$cut)") }
+        } catch (t: Throwable) { log("차 안 모델 오류: ${t.message}"); null }
+        finally { runCatching { finished.await(8, java.util.concurrent.TimeUnit.SECONDS) }; runCatching { session.close() } }
+    }
+
+    private val gate = kotlinx.coroutines.sync.Mutex() // 엔진 하나로 요청을 차례로 (동시 생성 금지)
+
+    /** 아무 프롬프트나 차 안 모델로 생성. 모델이 없거나 실패·시간 초과면 null. */
+    suspend fun generate(prompt: String, limitMs: Long = timeoutMs): String? {
+        if (!available) return null
+        return gate.withLock {
+            val raw = withContext(Dispatchers.IO) { engine()?.let { runStream(it, prompt, limitMs) } }
+            raw?.let { ByteLevel.fix(it) }
+        }
+    }
+
     override suspend fun structure(text: String, clientName: String?, now: Long): MeetingSummary {
         if (!available) return next.structure(text, clientName, now)
         val started = System.currentTimeMillis()
-        val raw = withTimeoutOrNull(timeoutMs) {
+        val raw = gate.withLock { withTimeoutOrNull(timeoutMs) {
             withContext(Dispatchers.IO) {
                 runCatching {
                     val e = engine() ?: return@runCatching null
@@ -55,12 +96,11 @@ class LocalLlmNoteAssistant(
                     var note = text
                     var p = prompt(note, clientName, now)
                     while (e.sizeInTokens(p) > INPUT_BUDGET && note.length > 40) { note = note.take((note.length * 0.8).toInt()); p = prompt(note, clientName, now) }
-                    e.generateResponse(p)
+                    runStream(e, p, timeoutMs)
                 }.onFailure { log("차 안 모델 오류: ${it.message}") }.getOrNull()
             }
-        }
+        } }
         val parsed = raw?.let { parse(it, text, now, clientName) }
-        if (raw == null) broken = true // 시간 초과 — 엔진이 붙잡혀 있을 수 있어 이번 실행에선 다시 쓰지 않는다
         if (parsed == null) {
             log("차 안 모델 정리 실패 → 규칙 기반 (${if (raw == null) "시간 초과" else "형식 오류"})")
             return next.structure(text, clientName, now)

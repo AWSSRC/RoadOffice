@@ -12,9 +12,18 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "purpose": { "type": "string", "enum": ["business", "personal"], "description": "Purpose category of the trip." }
+            "purpose": {
+              "type": "string",
+              "enum": [
+                "business",
+                "personal"
+              ],
+              "description": "Purpose category of the trip."
+            }
           },
-          "required": ["purpose"]
+          "required": [
+            "purpose"
+          ]
         },
         "component": "service"
       }
@@ -27,10 +36,18 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "note": { "type": "string", "description": "The user's spoken account of the meeting." },
-            "clientName": { "type": "string", "description": "Name of the client or company the meeting was with." }
+            "note": {
+              "type": "string",
+              "description": "The user's spoken account of the meeting."
+            },
+            "clientName": {
+              "type": "string",
+              "description": "Name of the client or company the meeting was with."
+            }
           },
-          "required": ["note"]
+          "required": [
+            "note"
+          ]
         },
         "component": "service"
       }
@@ -43,9 +60,34 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "clientName": { "type": "string", "description": "Name of the client or company to brief on." }
+            "clientName": {
+              "type": "string",
+              "description": "Name of the client or company to brief on."
+            }
           },
-          "required": ["clientName"]
+          "required": [
+            "clientName"
+          ]
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "ASK_ROADOFFICE",
+        "description": "Answer a question about the user's own work records, such as how many times a client was visited this month, remaining tasks, the next follow-up date, or business mileage.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string",
+              "description": "The user's question in their own words."
+            }
+          },
+          "required": [
+            "question"
+          ]
         },
         "component": "service"
       }

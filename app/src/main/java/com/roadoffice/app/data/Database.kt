@@ -64,6 +64,12 @@ data class MeetingNoteEntity(
     val tasksDone: Boolean = false,
     /** 음성·Gleo 로 들어온 정리 — 정차 중에 사람이 확인하기 전까지 "확인 필요" */
     val needsReview: Boolean = false,
+    /** AI 다음 행동 제안 — 고객에게 보낼 후속 문자 초안(보내기는 사람이) */
+    val aiMessage: String? = null,
+    /** AI 방문 브리핑 — 다음 방문 때 먼저 꺼낼 말 (1km 앞에서 바로 읽도록 미리 만들어 둔다) */
+    val aiTip: String? = null,
+    /** local-llm(차 안 모델이 씀) / template(문장 틀) */
+    val aiBy: String? = null,
 )
 
 /** 주유·충전 기록 — 주차 중 배터리·연료가 오른 것을 차량 신호로 포착. 금액은 사용자가 넣는다. */
@@ -127,6 +133,12 @@ interface MeetingNoteDao {
 
     @Query("UPDATE meeting_notes SET tasksDone = :done WHERE id = :id")
     suspend fun setDone(id: Long, done: Boolean)
+
+    @Query("UPDATE meeting_notes SET aiMessage = :message, aiTip = :tip, aiBy = :by WHERE id = :id")
+    suspend fun setAi(id: Long, message: String?, tip: String?, by: String?)
+
+    @Query("SELECT * FROM meeting_notes WHERE id = :id")
+    suspend fun byId(id: Long): MeetingNoteEntity?
 }
 
 @Dao
@@ -169,7 +181,7 @@ interface ClientDao {
     suspend fun delete(id: Long)
 }
 
-@Database(entities = [TripEntity::class, ClientEntity::class, MeetingNoteEntity::class, RefillEntity::class], version = 4, exportSchema = false)
+@Database(entities = [TripEntity::class, ClientEntity::class, MeetingNoteEntity::class, RefillEntity::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun trips(): TripDao
     abstract fun clients(): ClientDao
@@ -177,6 +189,15 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun refills(): RefillDao
 
     companion object {
+        /** v5: AI 후속 문자 초안 · 다음 방문 한 줄 */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `meeting_notes` ADD COLUMN `aiMessage` TEXT")
+                db.execSQL("ALTER TABLE `meeting_notes` ADD COLUMN `aiTip` TEXT")
+                db.execSQL("ALTER TABLE `meeting_notes` ADD COLUMN `aiBy` TEXT")
+            }
+        }
+
         /** v4: 상담 일지 "확인 필요" 표시 */
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -201,7 +222,7 @@ abstract class AppDatabase : RoomDatabase() {
             val passphrase = DbKeyStore(context).passphrase()
             return Room.databaseBuilder(context, AppDatabase::class.java, "roadoffice.db")
                 .openHelperFactory(SupportOpenHelperFactory(passphrase))
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 // v1 등 이전 개발 스키마만 초기화 (v2→v3 는 위 Migration 으로 데이터 유지)
                 .fallbackToDestructiveMigration()
                 .build()
