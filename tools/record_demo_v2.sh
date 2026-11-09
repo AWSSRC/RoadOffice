@@ -9,14 +9,14 @@ cd "$(dirname "$0")/.."
 ADB=${ADB:-$HOME/Library/Android/sdk/platform-tools/adb}
 V=http://127.0.0.1:8088/vehicle
 OUT=../demo/v2; mkdir -p $OUT
-put() { curl -s -X PUT "$V/$1" -o /dev/null; }
-post() { curl -s -X POST "$V/$1" -o /dev/null; }
+put() { curl -s --retry 4 --retry-all-errors --retry-delay 1 --max-time 10 -X PUT "$V/$1" -o /dev/null; }
+post() { curl -s --retry 4 --retry-all-errors --retry-delay 1 --max-time 10 -X POST "$V/$1" -o /dev/null; }
 seat() { post "seat?kind=occupied&area=$1&value=$2"; }
 soc() { post "ev-battery?field=soc&value=$1"; }
 geo() { $ADB emu geo fix "$2" "$1" >/dev/null; }
 tap() { tools/ui.sh tap "$1" >/dev/null; }
 say() { echo "[$(date +%H:%M:%S)] $1"; }
-odo() { curl -s $V/state | python3 -I -c "import json,sys;print(int(json.load(sys.stdin)['odometer']['traveled_distance_km']))"; }
+odo() { curl -s --retry 4 --retry-all-errors --max-time 10 $V/state | python3 -I -c "import json,sys;print(int(json.load(sys.stdin)['odometer']['traveled_distance_km']))"; }
 # 맨 앞이 로드오피스가 아니면(차량 제어·공조 화면 등이 덮으면) 닫고 앱을 다시 앞으로 — 11/08 녹화 전체가 공조 화면으로 찍힌 사고 대응
 front() {
   for k in 1 2 3; do

@@ -20,7 +20,7 @@ class AiAssistTest {
     @Test fun `AI 출력이 이상하면 문장 틀로 대신한다`() = runBlocking {
         val f = AiAssist { "모르겠어요" }.followUp("한빛병원", summary, tasks)
         assertEquals(AiAssist.TEMPLATE, f.by)
-        assertEquals("원장님, 오늘 말씀 나눈 단가표 보내 건은 11/6(금)까지 챙겨 드리겠습니다.", f.message)
+        assertEquals("원장님, 오늘 말씀 나눈 '단가표 보내기'는 11/6(금)까지 챙기겠습니다. 감사합니다.", f.message)
         val none = AiAssist { null }.followUp("한빛병원", summary, tasks)
         assertEquals(AiAssist.TEMPLATE, none.by)
     }

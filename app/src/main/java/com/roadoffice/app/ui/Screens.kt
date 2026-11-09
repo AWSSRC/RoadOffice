@@ -372,7 +372,7 @@ private fun UpcomingPanel(graph: AppGraph, guest: Boolean) {
                 Text(dayOnly.format(Date(n.followUpAt!!)), color = AccentText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(92.dp))
                 Column(Modifier.weight(1f)) {
                     Text(n.clientName ?: "거래처 미지정", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text(n.aiTip?.let { "AI · $it" } ?: n.summary, color = if (n.aiTip != null) AccentText else Sub, fontSize = 18.sp, maxLines = 1)
+                    Text(n.aiTip?.let { (if (n.aiBy == "local-llm") "AI · " else "다음 방문 · ") + it } ?: n.summary, color = if (n.aiTip != null) AccentText else Sub, fontSize = 18.sp, maxLines = 1)
                 }
             }
         }

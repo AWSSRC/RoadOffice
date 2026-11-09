@@ -60,9 +60,9 @@ class AiAssist(private val gen: suspend (String) -> String?) {
 
         /** 정중한 존댓말 한 문장, 링크·전화번호 없음 */
         fun okMessage(s: String, src: List<String>) = s.length in 12..90 && hangul(s) && !s.contains("http") &&
-            !Regex("\\d{3,4}-\\d{4}").containsMatchIn(s) && numbersFrom(s, src) && Regex("(니다|세요|어요|아요|해요)[.!]?$").containsMatchIn(s) && grounded(s, src, 0.35)
+            !Regex("\\d{3,4}-\\d{4}").containsMatchIn(s) && numbersFrom(s, src) && !Regex("주시면|주세요|부탁드|하시는 것").containsMatchIn(s) && Regex("(겠습니다|드릴게요|드리겠습니다|챙기겠습니다)[.!]?").containsMatchIn(s) && grounded(s, src, 0.35)
 
-        fun okTip(s: String, src: List<String>) = s.length in 6..50 && hangul(s) && numbersFrom(s, src) && grounded(s, src, 0.4) && !s.contains("주세요")
+        fun okTip(s: String, src: List<String>) = s.length in 6..50 && hangul(s) && numbersFrom(s, src) && grounded(s, src, 0.4) && !Regex("주시면|주세요|부탁|감사").containsMatchIn(s) && Regex("(확인|여쭤보기|꺼내기|안내|이야기|하기)$").containsMatchIn(s.trimEnd('.'))
 
         /** 답의 숫자는 모두 사실에 있어야 한다 (지어낸 숫자 금지) */
         fun okAnswer(s: String, facts: List<String>): Boolean {
@@ -80,23 +80,27 @@ class AiAssist(private val gen: suspend (String) -> String?) {
         fun templateFollowUp(client: String?, summary: String, tasks: List<String>): FollowUp {
             val who = honorific(summary)
             val first = tasks.firstOrNull()
-            val what = first?.substringBefore(" · ")?.removeSuffix("하기")?.removeSuffix("기")?.trim()
+            val what = first?.substringBefore(" · ")?.trim()
             val due = first?.substringAfter(" · ", "")?.removeSuffix("까지")?.trim()?.ifBlank { null }
             val msg = when {
-                what != null && due != null -> "$who, 오늘 말씀 나눈 ${what.trim()} 건은 $due 까지 챙겨 드리겠습니다."
-                what != null -> "$who, 오늘 말씀 나눈 ${what.trim()} 건 챙겨 드리겠습니다."
+                what != null && due != null -> "$who, 오늘 말씀 나눈 '$what'는 ${due}까지 챙기겠습니다. 감사합니다."
+                what != null -> "$who, 오늘 말씀 나눈 '$what' 챙기겠습니다. 감사합니다."
                 else -> "$who, 오늘 시간 내 주셔서 감사합니다."
-            }.replace(" 까지", "까지")
-            val tip = if (first != null) "${first.substringBefore(" · ")} 진행 상황부터 확인" else "지난번 ${summary.substringAfter(':', summary).trim()} 이야기부터"
+            }
+            val tip = if (what != null) "'$what' 진행 상황부터 확인" else "지난번 ${summary.substringAfter(':', summary).trim()} 이야기부터 꺼내기"
             return FollowUp(msg, tip, TEMPLATE)
         }
 
         fun followUpPrompt(client: String?, summary: String, tasks: List<String>) = """<|im_start|>system
-영업사원의 상담 기록으로 JSON 하나를 만든다. message=고객에게 보낼 정중한 존댓말 문자 한 문장(약속한 일과 기한). tip=다음 방문 때 영업사원이 먼저 꺼낼 말 한 줄. 기록에 없는 내용은 쓰지 않는다.<|im_end|>
+영업사원의 상담 기록으로 JSON 하나를 만든다. message=영업사원이 고객에게 보내는 문자 한 문장 — 영업사원이 약속한 일을 기한까지 '하겠습니다'로 약속한다(고객에게 부탁하지 않는다). tip=다음 방문 때 영업사원이 먼저 꺼낼 말 한 줄. 기록에 없는 내용은 쓰지 않는다.<|im_end|>
 <|im_start|>user
 거래처: 새솔내과의원 / 요약: 원장님: 견적 금액이 높다는 의견 / 할 일: 수정 견적서 보내기 · 10/29(목)까지<|im_end|>
 <|im_start|>assistant
 {"message":"원장님, 말씀하신 수정 견적서는 10/29(목)까지 보내 드리겠습니다.","tip":"수정 견적서 금액이 괜찮으셨는지 먼저 여쭤보기"}<|im_end|>
+<|im_start|>user
+거래처: 늘봄약국 / 요약: 약사님: 신제품 반응이 좋음 / 할 일: 샘플 두 박스 챙겨 가기 · 11/5(목)까지<|im_end|>
+<|im_start|>assistant
+{"message":"약사님, 신제품 샘플 두 박스는 11/5(목)까지 챙겨 가겠습니다.","tip":"샘플 써 보신 손님 반응 먼저 여쭤보기"}<|im_end|>
 <|im_start|>user
 거래처: ${client ?: "미지정"} / 요약: $summary / 할 일: ${tasks.joinToString(", ").ifBlank { "없음" }}<|im_end|>
 <|im_start|>assistant
