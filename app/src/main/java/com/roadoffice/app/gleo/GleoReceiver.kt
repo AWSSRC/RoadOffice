@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import com.roadoffice.app.graph
 import com.roadoffice.app.workmile.Purpose
-import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -58,21 +57,6 @@ class GleoReceiver : BroadcastReceiver() {
                             graph.launch { graph.ask(q) }
                         }
                     }
-                    GET_CLIENT_BRIEFING -> {
-                        val name = params.optString("clientName").take(80)
-                        // 동승자 보호: 고객이 타 있을 수 있어 거래처 정보를 소리 내 읽지 않는다
-                        if (graph.guestOnBoard) {
-                            respond(context, action, "fail", "동승자가 있어서 거래처 정보 보호를 위해 브리핑을 미뤘어요. 혼자 계실 때 다시 말씀해 주세요.")
-                            return@launch
-                        }
-                        val text = if (name.isBlank()) null else graph.briefByName(name)
-                        if (text == null) respond(context, action, "fail", "그 이름의 거래처를 찾지 못했어요.")
-                        else respond(
-                            context, action, "success", "거래처 브리핑을 읽어 드렸어요.",
-                            data = JSONArray().put(JSONObject().put("clientName", name).put("briefing", text)).toString(),
-                            mode = "silent", // 앱이 TTS 로 직접 읽었으므로 Gleo 는 소리 내지 않음
-                        )
-                    }
                     else -> respond(context, action, "fail", "지원하지 않는 요청이에요.")
                 }
             } catch (e: Exception) {
@@ -104,7 +88,6 @@ class GleoReceiver : BroadcastReceiver() {
     companion object {
         const val MARK_TRIP_PURPOSE = "MARK_TRIP_PURPOSE"
         const val ADD_MEETING_NOTE = "ADD_MEETING_NOTE"
-        const val GET_CLIENT_BRIEFING = "GET_CLIENT_BRIEFING"
         const val ASK_ROADOFFICE = "ASK_ROADOFFICE"
         const val RESPONSE_ACTION = "ai.pleos.playground.intent.action.APP_ACTION_RESPONSE"
         private const val MAX_TEXT = 2_000

@@ -55,28 +55,8 @@
     {
       "type": "function",
       "function": {
-        "name": "GET_CLIENT_BRIEFING",
-        "description": "Read a short summary of past meetings and open tasks for a client before the next visit.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "clientName": {
-              "type": "string",
-              "description": "Name of the client or company to brief on."
-            }
-          },
-          "required": [
-            "clientName"
-          ]
-        },
-        "component": "service"
-      }
-    },
-    {
-      "type": "function",
-      "function": {
         "name": "ASK_ROADOFFICE",
-        "description": "Answer a question about the user's own work records, such as how many times a client was visited this month, remaining tasks, the next follow-up date, or business mileage.",
+        "description": "Answer a question about the user's own work records or read a short briefing for a client, such as how many times a client was visited this month, remaining tasks, the next follow-up date, business mileage, or a summary of past meetings before the next visit.",
         "parameters": {
           "type": "object",
           "properties": {

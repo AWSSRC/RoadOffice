@@ -8,7 +8,7 @@ set -e
 cd "$(dirname "$0")/.."
 ADB=${ADB:-$HOME/Library/Android/sdk/platform-tools/adb}
 V=http://127.0.0.1:8088/vehicle
-OUT=../demo/v2; mkdir -p $OUT
+OUT=${OUT:-../demo/v2}; mkdir -p $OUT
 put() { curl -s --retry 4 --retry-all-errors --retry-delay 1 --max-time 10 -X PUT "$V/$1" -o /dev/null; }
 post() { curl -s --retry 4 --retry-all-errors --retry-delay 1 --max-time 10 -X POST "$V/$1" -o /dev/null; }
 seat() { post "seat?kind=occupied&area=$1&value=$2"; }

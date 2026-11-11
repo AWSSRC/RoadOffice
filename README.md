@@ -14,14 +14,15 @@
 |---|---|
 | 플랫폼 | Pleos Connect (Android Automotive OS), Pleos Connect Emulator 2.1.0 · API 34 · arm64 |
 | Pleos SDK | Vehicle 2.3.2 · NaviHelper 3.0.5 · FusedLocation 1.1.3 · SpeechToText/TextToSpeech 3.3.1 (ON_DEVICE) · LLM 2.1.3.2 · Gleo Interface |
-| 차 안 AI 모델 | Qwen2.5-0.5B-Instruct q8 (.task 546MB, Apache-2.0) · MediaPipe LLM Inference 0.10.24 — APK 밖 파일, `adb push -Z <모델> /data/local/tmp/llm/roadoffice_llm.task` (없으면 규칙 정리기로 동작) |
+| 차 안 AI 모델 | Qwen2.5-0.5B-Instruct q8 (.task 546MB, Apache-2.0) · MediaPipe LLM Inference 0.10.24 — APK 밖 파일 — `sh tools/install_model.sh` 가 공개 배포본([litert-community/Qwen2.5-0.5B-Instruct](https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct) `…_q8_ekv1280.task`, SHA-256 `e608953f…0452fd2`)을 받아 확인 후 `/data/local/tmp/llm/roadoffice_llm.task` 로 넣음. 없으면 규칙 정리기·문장 틀로 동작 |
 | 빌드 | JDK 17 · Gradle 8.7 · AGP 8.5.2 · Kotlin 1.9.24 · Jetpack Compose |
 | 미검증 | 실차, 실제 마이크 입력, Pleos 플랫폼 LLM 응답(에뮬레이터는 플랫폼 LLM 꺼짐 → 차 안 소형 모델이 요약, 실패 시 규칙 정리기), 내비 경로 서버 이벤트 |
 
 ## 실행 방법
 
-1. Android Studio SDK Manager 에 Pleos Connect Emulator 이미지를 추가하고 AVD(API 34, RAM 4GB) 를 만든 뒤 Cold boot.
+1. Android Studio SDK Manager 에 Pleos Connect Emulator 이미지를 추가하고 AVD(API 34, RAM 8GB 권장 — 차 안 AI 모델 사용 시) 를 만든 뒤 Cold boot.
 2. 설치: `adb install -g apk/AWSSRC_RoadOffice_release.apk` → 앱 실행 → 권한 허용.
+   - 차 안 AI(요약·AI에게 묻기)를 켜려면: `sh tools/install_model.sh` (모델 546MB 다운로드·SHA-256 확인·기기에 넣기) → 앱 다시 시작. Gleo 대신 직접 묻기: `adb shell "am broadcast -a ASK_ROADOFFICE -n com.roadoffice.app/.gleo.GleoReceiver --es ACTION_PARAM '{\"question\":\"이번 달 한빛병원 몇 번 갔어?\"}'"`
 3. 차량 신호는 Pleos Virtual Console(`adb forward tcp:8088 tcp:8088` → `http://127.0.0.1:8088`) 에서 기어·속도·주행거리·좌석 점유·배터리를 바꾼다.
    - Virtual Console 은 브라우저 세션이 열려 있어야 쓰기가 된다 — 브라우저를 열어 두거나 `tools/vc_heartbeat.sh` 실행.
 4. 시연 시나리오 (debug 빌드, 시연용 가상 데이터 포함):
@@ -40,7 +41,7 @@
 | 주유·충전 자동 포착 (km 단가 / 실비 정산) | 배터리 SOC · 연료 |
 | 하루 마감 30초 | 기어 · 좌석 |
 | 상담 활동 CSV (SFA·CRM 가져오기용, 상담 원문 제외) · 고유명사 사전 교정 · 정차 중 확인 | — |
-| Gleo 음성 명령 함수 3개 (운행 목적 지정 · 상담 메모 · 거래처 브리핑) | Gleo Interface |
+| Gleo 음성 명령 함수 3개 (운행 목적 지정 · 상담 메모 · AI에게 묻기/거래처 브리핑) — 가이드 최대 3개 | Gleo Interface |
 
 ## 빌드·테스트
 

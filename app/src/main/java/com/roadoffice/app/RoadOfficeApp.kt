@@ -385,6 +385,11 @@ class AppGraph(private val context: Context) {
     /** Gleo "로드오피스, 이번 달 한빛병원 몇 번 갔어?" — 기록에서 사실을 찾고 AI 가 한 문장으로 답해 읽는다 */
     suspend fun ask(question: String): String {
         if (guestOnBoard) { val t = "동승자가 있어서 거래처 기록은 혼자 계실 때 알려 드릴게요."; voice.speak(t); return t }
+        // 거래처 브리핑 요청("한빛병원 브리핑해 줘")도 이 함수로 받는다 — Gleo 함수는 앱당 최대 3개
+        if (BRIEF_ASK.containsMatchIn(question)) {
+            val c = AskFacts.client(question, db.clients().all(), terms)
+            if (c != null) { val t = brief(c, force = true); _lastAnswer.value = AskResult(question, t, false); return t }
+        }
         _aiBusy.value = "질문에 답을 찾는 중"
         val a = try { ai.answer(question, AskFacts.collect(question, db, terms), AskFacts.must(question, db.clients().all(), terms)) } finally { _aiBusy.value = null }
         _lastAnswer.value = AskResult(question, a.text, a.by == AiAssist.AI)
@@ -589,6 +594,7 @@ class AppGraph(private val context: Context) {
     fun launch(block: suspend CoroutineScope.() -> Unit) = scope.launch(block = block)
 
     private companion object {
+        val BRIEF_ASK = Regex("브리핑|브리프")
         const val BRIEF_RADIUS_M = 1_000.0
         const val DEBRIEF_WINDOW_MS = 3 * 60 * 60 * 1000L
         /** 이만큼 차를 떠나 있었으면 미팅을 한 것으로 본다 (짐 꺼내기 등 잠깐 내림은 제외) */

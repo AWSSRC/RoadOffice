@@ -3,7 +3,7 @@
 #  ai_notes: 상담 일지의 'AI 다음 행동 제안'(후속 문자 초안 · 다음 방문 한 줄) / ai_today: 오늘 화면 '다가오는 후속 일정 · AI' / ai_ask: Gleo 질문 → AI 답
 cd "$(dirname "$0")/.."
 ADB=${ADB:-$HOME/Library/Android/sdk/platform-tools/adb}
-OUT=../demo/v2
+OUT=${OUT:-../demo/v2}
 say() { echo "[$(date +%H:%M:%S)] $1"; }
 tap() { tools/ui.sh tap "$1" >/dev/null; }
 front() { for k in 1 2 3; do $ADB shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q com.roadoffice.app && return; $ADB shell am force-stop ai.umos.vehiclecontrol >/dev/null 2>&1; $ADB shell am start -n com.roadoffice.app/.MainActivity >/dev/null; sleep 2; done; }
