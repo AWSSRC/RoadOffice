@@ -25,6 +25,14 @@ class AiAssistTest {
         assertEquals(AiAssist.TEMPLATE, none.by)
     }
 
+    @Test fun `요약의 말이 섞여 꼬인 문자나 조건문 한 줄은 문장 틀로`() = runBlocking {
+        // 11/11 에뮬레이터 실제 출력 — 고객 반응(요약)이 내 약속 문장에 섞임
+        val mixed = AiAssist { """{"message":"원장님, 신제품 샘플 반응이 11/6(금)까지 단가표를 보내드리겠습니다.","tip":"'단가표 보내기' 진행 상황부터 확인"}""" }
+        assertEquals(AiAssist.TEMPLATE, mixed.followUp("한빛병원", summary, tasks).by)
+        val cond = AiAssist { """{"message":"원장님, 단가표는 11/6(금)까지 보내 드리겠습니다.","tip":"전화를 하시면 먼저 여쭤보기"}""" }
+        assertEquals(AiAssist.TEMPLATE, cond.followUp("한빛병원", summary, tasks).by)
+    }
+
     @Test fun `답에 사실에 없는 숫자가 있으면 버린다`() = runBlocking {
         val facts = listOf("이번 달 한빛병원 업무 방문 4번, 마지막 방문 11/4(수)")
         val good = AiAssist { """{"answer":"이번 달 한빛병원은 4번 방문하셨고, 마지막은 11/4(수)이에요."}""" }.answer("한빛병원 몇 번 갔어?", facts)

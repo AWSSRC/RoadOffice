@@ -19,10 +19,12 @@ class AiAssist(private val gen: suspend (String) -> String?) {
         val raw = gen(followUpPrompt(clientName, summary, tasks)) ?: return fallback
         val json = runCatching { JSONObject(raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1)) }.getOrNull() ?: return fallback
         val src = listOfNotNull(clientName, summary) + tasks
-        val msg = json.optString("message").clean().takeIf { okMessage(it, src) }
+        // 문자는 '내가 할 일'만 약속한다 — 상담 요약에만 있는 말(고객 반응·상황)이 섞이면 문장이 꼬이므로 버린다
+        val msg = json.optString("message").clean().takeIf { okMessage(it, src) && !summaryOnly(it, summary, listOfNotNull(clientName) + tasks) }
         val tip = json.optString("tip").clean().takeIf { okTip(it, src) }
-        if (msg == null && tip == null) return fallback
-        return FollowUp(msg ?: fallback.message, tip ?: fallback.tip, AI)
+        // 문자가 문장 틀이면 한 줄도 문장 틀로 — 화면의 'AI' 표시가 둘 다에 맞도록
+        if (msg == null || tip == null) return fallback
+        return FollowUp(msg, tip, AI)
     }
 
     /** [must] — 답에 꼭 들어가야 할 말(기간·거래처). 빠지면 문장 틀로 ("지난달"을 "이번"으로 바꿔 말하는 실수 방지) */
@@ -58,11 +60,19 @@ class AiAssist(private val gen: suspend (String) -> String?) {
             return Regex("\\d+").findAll(s).all { it.value in nums }
         }
 
+        /** 요약에만 있고 할 일·거래처에는 없는 낱말(두 글자 앞부분 기준)이 있으면 true */
+        fun summaryOnly(s: String, summary: String, keep: List<String>): Boolean {
+            val pool = keep.joinToString(" ").replace(" ", "")
+            val sum = summary.substringAfter(':', summary).replace(" ", "")
+            return Regex("[가-힣]{2,}").findAll(s).map { it.value }.filterNot { it in COMMON || it.endsWith("님") }
+                .any { w -> sum.contains(w.take(2)) && !pool.contains(w.take(2)) }
+        }
+
         /** 정중한 존댓말 한 문장, 링크·전화번호 없음 */
         fun okMessage(s: String, src: List<String>) = s.length in 12..90 && hangul(s) && !s.contains("http") &&
             !Regex("\\d{3,4}-\\d{4}").containsMatchIn(s) && numbersFrom(s, src) && !Regex("주시면|주세요|부탁드|하시는 것").containsMatchIn(s) && Regex("(겠습니다|드릴게요|드리겠습니다|챙기겠습니다)[.!]?").containsMatchIn(s) && grounded(s, src, 0.35)
 
-        fun okTip(s: String, src: List<String>) = s.length in 6..50 && hangul(s) && numbersFrom(s, src) && grounded(s, src, 0.4) && !Regex("주시면|주세요|부탁|감사").containsMatchIn(s) && Regex("(확인|여쭤보기|꺼내기|안내|이야기|하기)$").containsMatchIn(s.trimEnd('.'))
+        fun okTip(s: String, src: List<String>) = s.length in 6..50 && hangul(s) && numbersFrom(s, src) && grounded(s, src, 0.4) && !Regex("주시면|주세요|부탁|감사|하시면|하면").containsMatchIn(s) && Regex("(확인|여쭤보기|꺼내기|안내|이야기|하기)$").containsMatchIn(s.trimEnd('.'))
 
         /** 답의 숫자는 모두 사실에 있어야 한다 (지어낸 숫자 금지) */
         fun okAnswer(s: String, facts: List<String>): Boolean {
