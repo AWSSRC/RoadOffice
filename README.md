@@ -2,7 +2,7 @@
 
 > **차 안에서 일하는 영업직을 위한 Pleos Connect 업무 앱** — 시동부터 주차까지 차량 신호로 운행을 기록하고, 거래처 앞에서 지난 상담을 브리핑하고, 미팅 후 차에 타면 말로 상담 일지를 남기고, 월말 정산을 한 번에 만든다.
 
-현대자동차그룹 차량용 앱 개발 공모전(Code your App into Pleos App Market) 출품작 · 팀 AWSSRC (개인)
+현대자동차그룹 차량용 앱 개발 공모전(Code your App into Pleos App Market) 출품작 · 팀 AWSSRC (2인)
 
 ## APK
 
